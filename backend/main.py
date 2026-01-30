@@ -8,6 +8,7 @@ import random
 import pandas as pd
 from typing import List
 from services.finnhub_service import fetch_company_news, fetch_market_news
+import os
 
 # --- Database Setup ---
 DB_FILE = "favorites.db"
@@ -354,7 +355,33 @@ def get_top_tickers():
 
 @app.get("/explore")
 def get_explore_stocks():
-    stock_list = get_top_tickers()
+    file_path = os.path.join(os.path.dirname(__file__), 'top-1000.txt')
+    stock_list = []
+
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    if '|' in line:
+                        parts = line.split('|')
+                        ticker = parts[0].strip()
+                        name = parts[1].strip()
+                    else:
+                        ticker = line.strip()
+                        name = ticker # Fallback if name not present
+
+                    stock_list.append({"ticker": ticker, "name": name})
+        except Exception as e:
+            print(f"Error reading top-1000.txt: {e}")
+            stock_list = []
+
+    if not stock_list:
+        stock_list = get_top_tickers()
+
     tickers = [item["ticker"] for item in stock_list]
     results = []
 
