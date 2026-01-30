@@ -1,0 +1,8 @@
+Pinned stocks:
+
+1. Stock Change in price
+2. Stock Change in percentage
+3. Stock Name
+4. Stock Ticker
+5. Stock Price
+
