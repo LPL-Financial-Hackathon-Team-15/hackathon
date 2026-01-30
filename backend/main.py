@@ -15,4 +15,4 @@ async def github_webhook(request: Request):
 
 @app.get("/")
 def read_root():
-    return {"message": "Server running right now bruh"}
+    return {"message": "Server running right now"}
