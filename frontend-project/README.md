@@ -34,7 +34,7 @@ frontend-project/
 ├── src/
 │   ├── assets/         # Images, fonts, etc.
 │   ├── components/     # React components
-│   │   └── ExampleComponent.jsx
+│   │   └── HomeStockCard.jsx
 │   ├── App.jsx         # Main app component
 │   ├── main.jsx        # Entry point
 │   └── index.css       # Tailwind directives
