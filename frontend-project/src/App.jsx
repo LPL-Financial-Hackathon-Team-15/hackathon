@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Home from "./pages/Home.jsx";
+import Explore from "./pages/Explore.jsx";
 
 function App() {
   const [activeTab, setActiveTab] = useState('My Stocks')
@@ -8,10 +9,12 @@ function App() {
       <div className="min-h-screen bg-white">
         {/* Navbar */}
         <nav className="h-[10vh] bg-[#07407b] text-white px-8 py-4 flex items-center justify-between">
-          {/* Left side - NAME */}
-          <div className="text-2xl font-bold">
-            FAIR
-          </div>
+            <img
+                src="/fairlogo.png"
+                alt="FAIR Logo"
+                className="h-full"
+            />
+
 
           {/* Right side - Links */}
           <div className="flex gap-6">
@@ -47,10 +50,10 @@ function App() {
             </button>
           </div>
         </nav>
-
-        <Home></Home>
-
-
+          <main className="p-8 h-[90vh] bg-gradient-to-br from-[#07407b] via-[#0a5091] to-[#05325f]" >
+            {activeTab === 'My Stocks' && <Home />}
+            {activeTab === 'Explore' && <Explore />}
+          </main>
         <footer className="bg-[#07407b] py-6 text-center text-white text-sm">
           <p>© LPL Financial Hackathon Team 15 circa 2026</p>
           <p className="mt-1 text-xs ">
