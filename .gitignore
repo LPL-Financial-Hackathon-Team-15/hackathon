@@ -1,0 +1,6 @@
+
+# Ignore all pycharm project files
+.idea/
+
+#Backend Secrets
+backend/.env
