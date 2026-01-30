@@ -3,6 +3,8 @@ import subprocess
 import yfinance as yf
 import sqlite3
 from pydantic import BaseModel
+from typing import List
+from services.finnhub_service import fetch_company_news, fetch_market_news
 
 # --- Database Setup ---
 DB_FILE = "favorites.db"
@@ -25,6 +27,23 @@ def init_db():
 class StockFavorite(BaseModel):
     ticker: str
 
+class NewsArticle(BaseModel):
+    title: str
+    summary: str
+    source: str
+    url: str
+    published: str
+
+class CompanyNewsResponse(BaseModel):
+    ticker: str
+    article_count: int
+    articles: List[NewsArticle]
+
+class MarketNewsResponse(BaseModel):
+    category: str
+    article_count: int
+    articles: List[NewsArticle]
+
 # --- FastAPI App ---
 app = FastAPI()
 
@@ -42,6 +61,30 @@ async def github_webhook(request: Request):
 @app.get("/")
 def read_root():
     return {"message": "Server running right now"}
+
+@app.get("/news/company/{ticker}", response_model=CompanyNewsResponse)
+def get_company_news(
+    ticker: str,
+    days: int = 7
+):
+    articles = fetch_company_news(ticker, days)
+    return {
+        "ticker": ticker.upper(),
+        "article_count": len(articles),
+        "articles": articles
+    }
+
+@app.get("/news/category/{category}", response_model=MarketNewsResponse)
+def get_market_news(
+    category:str="general",
+    days: int=7
+):
+    articles = fetch_market_news(category, days)
+    return {
+        "category": category,
+        "article_count": len(articles),
+        "articles": articles
+        }
 
 @app.get("/stock/{ticker}")
 def get_stock_history(ticker: str):
