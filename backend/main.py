@@ -9,7 +9,7 @@ async def github_webhook(request: Request):
 
     # Optional: check branch
     if payload["ref"] == "refs/heads/main":
-        subprocess.run(["git", "pull"], cwd="/home/ec2-user/")
+        subprocess.run(["git", "pull"], cwd="/home/ec2-user/hackathon")
 
     return {"status": "ok"}
 
