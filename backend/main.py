@@ -572,14 +572,22 @@ async def get_summarized_news(ticker: str, period: int = 7):
             news_urls.append(getattr(article, "url", ""))
             
     request = NewsSummaryRequest(ticker=ticker, news=news_texts, urls=news_urls)
-    return await summarize_news(request)
+    result = await summarize_news(request)
+    if result is None:
+        return {
+            "summary": "Summary unavailable.",
+            "key_themes": [],
+            "sentiment": "neutral",
+            "disclaimer": "Error processing request."
+        }
+    return result
 
 async def summarize_news(request: NewsSummaryRequest):
     """NEW: Summarize your provided news with Bedrock Guardrails"""
     try:
         result = summarize_news_with_bedrock(request.ticker, request.news, request.urls)
         if result is None:
-            return {"summary": "Summary unavailable.", "sources": [], "sentiment": "neutral", "disclaimer": "Error."}
+            return {"summary": "Summary unavailable.", "key_themes": [], "sentiment": "neutral", "disclaimer": "Error."}
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
