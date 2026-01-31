@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import Panel from './Panel.jsx'
 import SearchBar from './SearchBar'
+import MarketOverviewPanel from "./MarketOverviewPanel.jsx";
 
 export default function ExploreRightPanels({ onSearch }) {
     const [topExpanded, setTopExpanded] = useState(false)
@@ -70,13 +71,11 @@ export default function ExploreRightPanels({ onSearch }) {
                     <p className="p-2 text-sm text-gray-500">No news available</p>
                 )}
             </Panel>
-            <Panel
-                title="AI Market Overview"
+            <MarketOverviewPanel
                 isExpanded={bottomExpanded}
                 isCollapsed={topExpanded}
                 onExpand={handleBottomExpand}
                 onCollapse={handleCollapse}
-                isLoading={bottomLoading}
             />
         </div>
     )
