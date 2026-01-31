@@ -57,7 +57,7 @@ export default function ExploreRightPanels({ onSearch }) {
                     isLoading={topLoading}
                 >
                     {newsArticles.length ? (
-                        <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
+                        <div className="flex flex-col gap-2">
                             {newsArticles.map((article, idx) => (
                                 <div key={idx} className="p-2 border-b border-gray-200 last:border-b-0">
                                     <a
