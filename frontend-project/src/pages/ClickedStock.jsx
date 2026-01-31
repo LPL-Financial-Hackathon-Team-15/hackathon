@@ -22,6 +22,7 @@ export default function ClickedStock() {
 
     // Right side panels
     const [newsArticles, setNewsArticles] = useState([])
+    const [aiData, setAiData] = useState(null)
     const [topRightExpanded, setTopRightExpanded] = useState(false)
     const [bottomRightExpanded, setBottomRightExpanded] = useState(false)
     const [topRightLoading, setTopRightLoading] = useState(false)
@@ -76,6 +77,30 @@ export default function ClickedStock() {
 
         fetchStockHistory()
     }, [ticker])
+
+    useEffect(() => {
+        if (!ticker) return;
+        
+        setTopRightLoading(true);
+        fetch(`http://ec2-3-142-36-77.us-east-2.compute.amazonaws.com:8000/analyze/${ticker}?period=1y`)
+            .then(res => res.json())
+            .then(data => {
+                setAiData(data);
+                setTopRightLoading(false);
+            })
+            .catch(err => {
+                console.error('Failed to fetch AI summary:', err);
+                setTopRightLoading(false);
+            });
+    }, [ticker]);
+
+    // Helper to color-code sentiment
+    const getSentimentColor = (sentiment) => {
+        const s = sentiment?.toLowerCase() || '';
+        if (s.includes('positive')) return 'bg-green-100 text-green-800 border-green-200';
+        if (s.includes('negative')) return 'bg-red-100 text-red-800 border-red-200';
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+    };
 
     useEffect(() => {
         setBottomRightLoading(true)
@@ -198,7 +223,36 @@ export default function ClickedStock() {
                         onCollapse={handleRightCollapse}
                         isLoading={topRightLoading}
                     >
-                        <p className="text-gray-500">AI analysis for {ticker} - Coming soon!</p>
+                        {aiData ? (
+                            <div className="flex flex-col gap-4 h-full overflow-y-auto">
+                                
+                                {/* Header: Sentiment Badge */}
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-gray-500">Market Sentiment (7d)</span>
+                                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border ${getSentimentColor(aiData.sentiment)}`}>
+                                        {aiData.sentiment}
+                                    </span>
+                                </div>
+
+                                {/* Main Analysis Body */}
+                                <div className="prose prose-sm max-w-none text-gray-700 leading-relaxed">
+                                    <p>{aiData.analysis}</p>
+                                </div>
+
+                                {/* Disclaimer Footer */}
+                                <div className="mt-auto pt-4 border-t border-gray-100 space-y-2">
+
+                                    {/* Disclaimer */}
+                                    {aiData.disclaimer && (
+                                        <p className="text-[10px] text-gray-400 italic">
+                                            {aiData.disclaimer}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            !topRightLoading && <p className="text-gray-500 p-2">Unable to generate analysis at this time.</p>
+                        )}
                     </Panel>
 
                     <Panel
