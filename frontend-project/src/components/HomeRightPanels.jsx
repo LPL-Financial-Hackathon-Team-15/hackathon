@@ -1,6 +1,7 @@
 // components/RightPanel.jsx - update to pass isCollapsed prop
 import { useState, useEffect } from 'react'
 import Panel from './Panel.jsx'
+import MarketOverviewPanel from "./MarketOverviewPanel.jsx";
 
 export default function HomeRightPanels() {
     const [topExpanded, setTopExpanded] = useState(false)
@@ -9,12 +10,11 @@ export default function HomeRightPanels() {
     const [bottomLoading, setBottomLoading] = useState(true)
 
     const [portfolioData, setPortfolioData] = useState(null);
-
     useEffect(() => {
     // Hardcoded user_id 'investor_01'
     const userId = 'investor_01';
     
-    setBottomLoading(true);
+    setTopLoading(true);
     
     fetch(`http://ec2-3-142-36-77.us-east-2.compute.amazonaws.com:8000/pinned/overview/${userId}`)
         .then(res => {
@@ -23,11 +23,11 @@ export default function HomeRightPanels() {
         })
         .then(data => {
             setPortfolioData(data);
-            setBottomLoading(false);
+            setTopLoading(false);
         })
         .catch(err => {
             console.error(err);
-            setBottomLoading(false);
+            setTopLoading(false);
         });
     }, []);
 
@@ -63,10 +63,10 @@ export default function HomeRightPanels() {
                 isCollapsed={bottomExpanded}
                 onExpand={handleTopExpand}
                 onCollapse={handleCollapse}
-                isLoading={bottomLoading} // Using the local loading state we created
+                isLoading={topLoading} // Using the local loading state we created
             >
                 {portfolioData ? (
-                    <div className="flex flex-col h-full overflow-y-auto">
+                    <div className="flex flex-col h-full">
                         
                         {/* 1. Portfolio Overview Section */}
                         <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 mb-6">
@@ -122,14 +122,7 @@ export default function HomeRightPanels() {
                     !bottomLoading && <p className="p-4 text-gray-500">No portfolio analysis available.</p>
                 )}
             </Panel>
-            <Panel
-                title="AI Market Overview"
-                isExpanded={bottomExpanded}
-                isCollapsed={topExpanded}
-                onExpand={handleBottomExpand}
-                onCollapse={handleCollapse}
-                isLoading={bottomLoading}
-            />
+            <MarketOverviewPanel isExpanded={bottomExpanded} onExpand={handleBottomExpand} isCollapsed={topExpanded} onCollapse={handleCollapse}></MarketOverviewPanel>
         </div>
     )
 }
