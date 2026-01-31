@@ -4,7 +4,7 @@ import axios from 'axios';
 
 export const StockGraph = ({ ticker, change }) => {
     const [chartData, setChartData] = useState([]);
-    const [activeTimeframe, setActiveTimeframe] = useState({ 
+    const [activeTimeframe, setActiveTimeframe] = useState({
         label: '1M', 
         period: '1mo', 
         interval: '1d' 
@@ -49,7 +49,7 @@ export const StockGraph = ({ ticker, change }) => {
                     const isPositive = endPrice >= startPrice;
                     setChartColor(isPositive ? '#16a34a' : '#dc2626');
                 }
-                
+
                 setChartData(formattedData);
             } catch (error) {
                 console.error("Error fetching chart data:", error);
@@ -92,7 +92,7 @@ export const StockGraph = ({ ticker, change }) => {
             theme: 'dark',
             x: { format: 'dd MMM yyyy HH:mm' } 
         }
-        
+
     };
 
     if (!ticker) return <div className="p-10 text-slate-400">Select a stock to view insights.</div>;
