@@ -1,6 +1,7 @@
 import Home from "./pages/Home.jsx";
 import Explore from "./pages/Explore.jsx";
 import ClickedStock from "./pages/ClickedStock.jsx";
+import AccountPage from "./pages/Account.jsx";
 import {Route, Routes} from "react-router";
 import Navbar from "./components/Navbar.jsx";
 
@@ -15,7 +16,7 @@ function App() {
                   <Route path="/" element={<Home />} />
                   <Route path="/explore" element={<Explore />} />
                   <Route path="/stock/:ticker" element={<ClickedStock />} />
-                  {/*<Route path="/account" element={<AccountInfoPage />} />*/}
+                  <Route path="/account" element={<AccountPage />} />
               </Routes>
           </main>
         <footer className="bg-[#07407b] py-6 text-center text-white text-sm">
