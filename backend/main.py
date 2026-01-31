@@ -178,6 +178,7 @@ Output ONLY valid JSON: {{"summary": "brief overall summary", "sentiment": "neut
 
     messages = [{"role": "user", "content": [{"text": f"Summarize these articles:\n{news_content}"}]}]
 
+    output_text = "" # Define here for logging in case of error
     try:
         resp = bedrock_runtime.converse(
             modelId=MODEL_ID,
@@ -199,7 +200,23 @@ Output ONLY valid JSON: {{"summary": "brief overall summary", "sentiment": "neut
             }
 
         output_text = resp['output']['message']['content'][0]['text']
-        parsed = json.loads(output_text)  # Enforce JSON
+
+        # The model can sometimes return the JSON inside a markdown block or with extra text.
+        # This logic extracts the JSON robustly.
+        json_str = output_text
+        if '```json' in output_text:
+            try:
+                json_str = output_text.split('```json\n')[1].split('\n```')
+            except IndexError:
+                pass # Fallback to finding curly braces
+        
+        if '{' in json_str:
+            start = json_str.find('{')
+            end = json_str.rfind('}') + 1
+            if start != -1 and end != 0:
+                json_str = json_str[start:end]
+
+        parsed = json.loads(json_str)
 
         return {
             **parsed,
@@ -208,6 +225,7 @@ Output ONLY valid JSON: {{"summary": "brief overall summary", "sentiment": "neut
         }
 
     except json.JSONDecodeError:
+        print(f"Bedrock JSON decode failed. Raw output was: {output_text}")
         return {"summary": "Summary generation failed.", "sources": [], "sentiment": "neutral",
                 "disclaimer": "Error occurred."}
     except Exception as e:
