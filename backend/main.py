@@ -1362,7 +1362,7 @@ News Articles:
 {news_content}
 
 Provide your response as a JSON object with exactly two keys:
-1. "overview": An in depth explanation, consisting of at least 200 words
+1. "summary": An in depth explanation, consisting of at least 200 words
 2. "sentiment": One of "positive", "negative", or "neutral"
 
 Return ONLY the JSON object, no other text."""
