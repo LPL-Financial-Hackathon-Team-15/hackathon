@@ -21,6 +21,7 @@ export default function ClickedStock() {
     const [bottomLeftLoading, setBottomLeftLoading] = useState(false)
 
     // Right side panels
+    const [newsArticles, setNewsArticles] = useState([])
     const [topRightExpanded, setTopRightExpanded] = useState(false)
     const [bottomRightExpanded, setBottomRightExpanded] = useState(false)
     const [topRightLoading, setTopRightLoading] = useState(false)
@@ -75,6 +76,20 @@ export default function ClickedStock() {
 
         fetchStockHistory()
     }, [ticker])
+
+    useEffect(() => {
+        setBottomRightLoading(true)
+        fetch(`http://ec2-3-142-36-77.us-east-2.compute.amazonaws.com:8000/news/company/${ticker}?days=30`)
+            .then(res => res.json())
+            .then(data => {
+                setNewsArticles(data.articles || [])
+                setBottomRightLoading(false)
+            })
+            .catch(err => {
+                console.error('Failed to fetch news:', err)
+                setBottomRightLoading(false)
+            })
+    }, [])
 
     const isPositive = stockData?.costChange >= 0
     const changeColor = isPositive ? 'text-green-600' : 'text-red-600'
@@ -194,7 +209,25 @@ export default function ClickedStock() {
                         onCollapse={handleRightCollapse}
                         isLoading={bottomRightLoading}
                     >
-                        <p className="text-gray-500">News and events - Coming soon!</p>
+                        {newsArticles.length ? (
+                            <div className="flex flex-col gap-2">
+                                {newsArticles.map((article, idx) => (
+                                    <div key={idx} className="p-2 border-b border-gray-200 last:border-b-0">
+                                        <a
+                                            href={article.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-600 hover:underline font-medium"
+                                        >
+                                            {article.title}
+                                        </a>
+                                        <p className="text-sm mt-1 text-gray-700">{article.summary}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="p-2 text-sm text-gray-500">No news available</p>
+                        )}
                     </Panel>
                 </div>
             </div>
