@@ -105,31 +105,49 @@ def fetch_price_data(tickers):
     Fetches current price and previous close for a list of tickers using yfinance bulk download.
     Returns a dictionary: {ticker: (current_price, previous_close)}
     """
+    print(f"\n=== FETCH_PRICE_DATA DEBUG START ===")
+    print(f"Input tickers: {tickers} (type: {type(tickers)})")
+
     if not tickers:
+        print("No tickers provided, returning empty dict")
         return {}
 
     if isinstance(tickers, str):
         tickers = [tickers]
+        print(f"Converted string to list: {tickers}")
 
     try:
+        print(f"Downloading data for tickers: {tickers}")
         # Download data for all tickers at once
-        # period="5d" ensures we have enough history for previous close even after weekends
-        # group_by='ticker' organizes columns by ticker
         data = yf.download(tickers, period="5d", interval="1d", group_by='ticker', progress=False, threads=True)
+        print(f"Download complete. Data shape: {data.shape if hasattr(data, 'shape') else 'N/A'}")
+        print(f"Data columns: {data.columns.tolist() if hasattr(data, 'columns') else 'N/A'}")
+        print(f"Data head:\n{data.head() if hasattr(data, 'head') else data}")
     except Exception as e:
-        print(f"Error downloading data: {e}")
+        print(f"!!! Error downloading data: {e} !!!")
+        import traceback
+        traceback.print_exc()
         return {}
 
     results = {}
 
     # Helper to extract data from a single-ticker DataFrame
     def extract_from_df(df):
-        if df.empty or 'Close' not in df:
+        print(f"  extract_from_df called")
+        print(f"  df.empty: {df.empty}")
+        print(f"  df.columns: {df.columns.tolist() if hasattr(df, 'columns') else 'N/A'}")
+
+        if df.empty or 'Close' not in df.columns:
+            print(f"  Returning None - empty or no Close column")
             return None
 
         # Get valid close prices
         closes = df['Close'].dropna()
+        print(f"  Valid closes: {closes.tolist()}")
+        print(f"  Number of valid closes: {len(closes)}")
+
         if len(closes) == 0:
+            print(f"  Returning None - no valid closes")
             return None
 
         current = float(closes.iloc[-1])
@@ -137,23 +155,40 @@ def fetch_price_data(tickers):
         if len(closes) > 1:
             prev = float(closes.iloc[-2])
 
+        print(f"  Extracted: current={current}, prev={prev}")
         return current, prev
 
     # Handle the structure of the returned DataFrame
     if len(tickers) == 1:
-        # When only one ticker, yfinance returns a flat DataFrame (no MultiIndex columns for tickers)
+        print(f"\nProcessing single ticker: {tickers[0]}")
         ticker = tickers[0]
         res = extract_from_df(data)
         if res:
             results[ticker] = res
+            print(f"  Added {ticker}: {res}")
+        else:
+            print(f"  No data for {ticker}")
     else:
+        print(f"\nProcessing multiple tickers")
         # MultiIndex columns: top level is Ticker
         for ticker in tickers:
-            # Check if ticker is in the columns (it might be missing if download failed)
-            if ticker in data:
+            print(f"\n  Processing ticker: {ticker}")
+            # Check if ticker is in the columns
+            if ticker in data.columns.get_level_values(0):
+                print(f"    {ticker} found in data columns")
                 res = extract_from_df(data[ticker])
                 if res:
                     results[ticker] = res
+                    print(f"    Added {ticker}: {res}")
+                else:
+                    print(f"    No valid data extracted for {ticker}")
+            else:
+                print(f"    {ticker} NOT in data columns")
+                print(f"    Available columns: {data.columns.get_level_values(0).unique().tolist()}")
+
+    print(f"\n=== FETCH_PRICE_DATA RESULTS ===")
+    print(f"Results: {results}")
+    print(f"=== FETCH_PRICE_DATA DEBUG END ===\n")
 
     return results
 
