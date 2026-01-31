@@ -465,7 +465,11 @@ async def github_webhook(request: Request):
         subprocess.run(["git", "pull"], cwd="/home/ec2-user/hackathon")
     return {"status": "ok"}
 
-
+@app.get("/")
+async def read_root():
+    ticker = yf.Ticker("AAPL")
+    hist = ticker.history(period="5d")
+    return {"message": hist}
 @app.get("/news/company/{ticker}", response_model=CompanyNewsResponse)
 def get_company_news(
     ticker: str,
