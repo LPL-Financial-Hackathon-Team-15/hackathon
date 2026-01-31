@@ -95,10 +95,7 @@ class NewsSummaryResponse(BaseModel):
     disclaimer: str
 
 class StockAnalysisResponse(BaseModel):
-    ticker: str
-    period: str
     analysis: str
-    key_metrics: dict
     sentiment: str
     disclaimer: str
 
@@ -685,22 +682,11 @@ async def summarize_news(request: NewsSummaryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
 
-
-# Add this Pydantic model with your other models
-class StockAnalysisResponse(BaseModel):
-    ticker: str
-    period: str
-    analysis: str
-    key_metrics: dict
-    sentiment: str
-    disclaimer: str
-
-
-# Add this helper function with your other helper functions
+# Update the helper function
 def analyze_stock_performance(ticker, period="1y"):
     """
     Analyzes historical stock performance using price data and AWS Bedrock.
-    Returns analysis, key metrics, and sentiment.
+    Returns analysis, sentiment, and disclaimer.
     """
     try:
         stock = yf.Ticker(ticker)
@@ -708,9 +694,9 @@ def analyze_stock_performance(ticker, period="1y"):
 
         if hist.empty:
             return {
-                "error": "No historical data available for this ticker.",
-                "ticker": ticker,
-                "period": period
+                "analysis": f"No historical data available for {ticker} over the {period} period.",
+                "sentiment": "neutral",
+                "disclaimer": "Unable to perform analysis due to lack of data."
             }
 
         # Calculate key metrics
@@ -734,19 +720,6 @@ def analyze_stock_performance(ticker, period="1y"):
         else:
             ma_200 = None
 
-        # Prepare metrics dictionary
-        key_metrics = {
-            "current_price": round(current_price, 2),
-            "start_price": round(start_price, 2),
-            "total_return_percent": round(total_return, 2),
-            "high_price": round(high_price, 2),
-            "low_price": round(low_price, 2),
-            "volatility_percent": round(volatility, 2),
-            "average_volume": int(avg_volume),
-            "ma_50": round(ma_50, 2) if ma_50 else None,
-            "ma_200": round(ma_200, 2) if ma_200 else None
-        }
-
         # Prepare data summary for Bedrock
         data_summary = f"""
 Ticker: {ticker}
@@ -754,8 +727,8 @@ Period: {period}
 Current Price: ${current_price:.2f}
 Starting Price: ${start_price:.2f}
 Total Return: {total_return:.2f}%
-52-Week High: ${high_price:.2f}
-52-Week Low: ${low_price:.2f}
+High Price: ${high_price:.2f}
+Low Price: ${low_price:.2f}
 Price Volatility: {volatility:.2f}%
 Average Daily Volume: {avg_volume:,.0f}
 """
@@ -776,16 +749,22 @@ Average Daily Volume: {avg_volume:,.0f}
 
 {data_summary}
 
-Provide a comprehensive analysis in JSON format with exactly three keys:
-1. "analysis": A detailed 3-4 sentence analysis covering performance trends, volatility, and key observations
-2. "sentiment": One of "bullish", "bearish", or "neutral" based on the technical indicators
-3. "key_insights": A list of 2-3 bullet points highlighting the most important findings
+Provide your response as a JSON object with exactly two keys:
+1. "analysis": A comprehensive 4-5 sentence analysis covering:
+   - Overall performance and total return over the period
+   - Volatility assessment and what it means
+   - Technical indicators (moving averages if available)
+   - Key patterns or trends observed
+   - Notable price levels (highs/lows)
 
+2. "sentiment": One of "bullish", "bearish", or "neutral" based on the technical indicators and performance
+
+Be specific with numbers and percentages. Write in clear, professional language.
 Return ONLY the JSON object, no other text."""
                     }]
                 }],
                 inferenceConfig={
-                    "maxTokens": 800,
+                    "maxTokens": 1000,
                     "temperature": 0.3
                 }
             )
@@ -794,6 +773,13 @@ Return ONLY the JSON object, no other text."""
             print(f"--- Bedrock Analysis Response for {ticker} ---")
             print(raw_text)
             print("--- End Response ---")
+
+            if not raw_text:
+                return {
+                    "analysis": "Model returned empty response.",
+                    "sentiment": "neutral",
+                    "disclaimer": "This is automated analysis based on historical data. Not financial advice."
+                }
 
             # Extract JSON from response
             json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_text, re.DOTALL)
@@ -804,59 +790,62 @@ Return ONLY the JSON object, no other text."""
                 if json_match:
                     json_str = json_match.group(0)
                 else:
-                    # Fallback to raw text
+                    # No JSON found, use raw text as analysis
                     return {
-                        "ticker": ticker,
-                        "period": period,
-                        "analysis": raw_text[:500],
-                        "key_metrics": key_metrics,
+                        "analysis": raw_text[:1000],
                         "sentiment": "neutral",
-                        "disclaimer": "This is automated analysis. Not financial advice."
+                        "disclaimer": "This is automated analysis based on historical data. Not financial advice."
                     }
 
             # Parse JSON
             import json as json_module
             data = json_module.loads(json_str)
 
-            analysis_text = data.get("analysis", "Analysis unavailable.")
+            analysis_text = data.get("analysis", "").strip()
             sentiment = data.get("sentiment", "neutral").lower()
 
             # Validate sentiment
             if sentiment not in ["bullish", "bearish", "neutral"]:
                 sentiment = "neutral"
 
-            # Add key insights to the analysis if available
-            if "key_insights" in data and data["key_insights"]:
-                insights = data["key_insights"]
-                if isinstance(insights, list):
-                    analysis_text += "\n\nKey Insights:\n" + "\n".join([f"• {insight}" for insight in insights])
+            if not analysis_text:
+                analysis_text = "No analysis provided by model."
 
             return {
-                "ticker": ticker.upper(),
-                "period": period,
                 "analysis": analysis_text,
-                "key_metrics": key_metrics,
                 "sentiment": sentiment,
                 "disclaimer": "This is automated analysis based on historical data. Not financial advice."
             }
 
         except Exception as bedrock_error:
             print(f"Bedrock error: {bedrock_error}")
-            # Return metrics with basic analysis if Bedrock fails
+            import traceback
+            traceback.print_exc()
+
+            # Return basic analysis if Bedrock fails
             basic_analysis = f"Over the {period} period, {ticker} "
             if total_return > 0:
                 basic_analysis += f"has gained {total_return:.2f}%, "
             else:
                 basic_analysis += f"has declined {abs(total_return):.2f}%, "
-            basic_analysis += f"with volatility at {volatility:.2f}%."
+
+            basic_analysis += f"moving from ${start_price:.2f} to ${current_price:.2f}. "
+            basic_analysis += f"The stock reached a high of ${high_price:.2f} and a low of ${low_price:.2f} during this period. "
+            basic_analysis += f"Price volatility measured at {volatility:.2f}%, "
+
+            if volatility < 2:
+                basic_analysis += "indicating relatively stable price movements."
+            elif volatility < 4:
+                basic_analysis += "showing moderate price fluctuations."
+            else:
+                basic_analysis += "reflecting significant price swings."
+
+            basic_sentiment = "bullish" if total_return > 5 else ("bearish" if total_return < -5 else "neutral")
 
             return {
-                "ticker": ticker.upper(),
-                "period": period,
                 "analysis": basic_analysis,
-                "key_metrics": key_metrics,
-                "sentiment": "neutral",
-                "disclaimer": "Basic analysis only. AI analysis unavailable."
+                "sentiment": basic_sentiment,
+                "disclaimer": "Basic analysis only. AI-powered analysis unavailable. Not financial advice."
             }
 
     except Exception as e:
@@ -866,7 +855,7 @@ Return ONLY the JSON object, no other text."""
         raise HTTPException(status_code=500, detail=f"Error analyzing stock: {str(e)}")
 
 
-# Add this endpoint with your other endpoints
+# Update the endpoint
 @app.get("/analyze/{ticker}", response_model=StockAnalysisResponse)
 async def analyze_stock(ticker: str, period: str = "1y"):
     """
@@ -877,10 +866,10 @@ async def analyze_stock(ticker: str, period: str = "1y"):
     - period: Time period for analysis (default: 1y)
               Valid periods: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
 
-    Returns comprehensive analysis including:
-    - AI-generated performance analysis
-    - Key metrics (returns, volatility, moving averages)
-    - Sentiment (bullish/bearish/neutral)
+    Returns:
+    - analysis: Comprehensive analysis of stock performance
+    - sentiment: Overall sentiment (bullish, bearish, or neutral)
+    - disclaimer: Legal disclaimer about the analysis
     """
     valid_periods = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max']
 
@@ -892,10 +881,6 @@ async def analyze_stock(ticker: str, period: str = "1y"):
 
     try:
         result = analyze_stock_performance(ticker.upper(), period)
-
-        if "error" in result:
-            raise HTTPException(status_code=404, detail=result["error"])
-
         return result
 
     except HTTPException:
