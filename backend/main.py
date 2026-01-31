@@ -381,7 +381,15 @@ def get_explore_stocks():
             stock_list = []
 
     if not stock_list:
+        # Fallback to hardcoded list if file read fails or is empty
+        # But per requirements, we should ideally stick to the file.
+        # If the file is empty/missing, this fallback is a safety net.
         stock_list = get_top_tickers()
+
+    # OPTIMIZATION: Randomly select 50 stocks to display instead of all 1000
+    # This prevents the "loads forever" issue by reducing the yfinance payload.
+    if len(stock_list) > 100:
+        stock_list = random.sample(stock_list, 100)
 
     tickers = [item["ticker"] for item in stock_list]
     results = []
