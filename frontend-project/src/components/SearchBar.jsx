@@ -26,7 +26,7 @@ export default function SearchBar({ onSearch }) {
                     value={searchTerm}
                     onChange={handleChange}
                     placeholder="Search stocks by ticker or company name..."
-                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#07407b] focus:border-transparent"
+                    className="w-full px-4 py-1 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#07407b] focus:border-transparent"
                 />
                 <button
                     type="submit"

@@ -184,13 +184,13 @@ export default function ExploreStocks({ searchResults, setSearchResults, allStoc
             <div className="h-[calc(90vh-5rem)] overflow-hidden w-1/2 bg-gray-50 border-r border-gray-200 rounded-2xl m-4 flex flex-col">
                 {/* Header - Fixed with Title, Search Bar, and Filter Button */}
                 <div className="bg-gray-50 border-b rounded-t-2xl border-gray-200 p-4">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center justify-between">
                         <h2 className="text-xl font-bold text-[#07407b] whitespace-nowrap">Explore Stocks</h2>
-                        <div className="flex items-center gap-2 w-1/2"> {/* Changed from flex-1 to fixed width */}
+                        <div className="flex items-center gap-2 w-1/2">
                                 <SearchBar onSearch={onSearch} />
                             <button
                                 onClick={() => setFilterPanelOpen(true)}
-                                className="text-gray-400 hover:text-[#07407b] transition-colors p-2 flex-shrink-0"
+                                className="text-gray-400 hover:text-[#07407b] transition-colors p-2"
                                 title="Filter & Sort"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -41,47 +41,43 @@ export default function ExploreRightPanels({ onSearch }) {
     }
 
     return (
-        <div className="h-[calc(90vh-5rem)] m-4 flex flex-col gap-4 flex-1">
-            {/* Data Panels */}
-            <div className="min-h-0 flex-1 flex flex-col gap-4">
-
-                <Panel
-                    title="Financial News"
-                    isExpanded={topExpanded}
-                    isCollapsed={bottomExpanded}
-                    onExpand={handleTopExpand}
-                    onCollapse={handleCollapse}
-                    isLoading={topLoading}
-                >
-                    {newsArticles.length ? (
-                        <div className="flex flex-col gap-2">
-                            {newsArticles.map((article, idx) => (
-                                <div key={idx} className="p-2 border-b border-gray-200 last:border-b-0">
-                                    <a
-                                        href={article.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 hover:underline font-medium"
-                                    >
-                                        {article.title}
-                                    </a>
-                                    <p className="text-sm mt-1 text-gray-700">{article.summary}</p>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="p-2 text-sm text-gray-500">No news available</p>
-                    )}
-                </Panel>
-                <Panel
-                    title="AI Market Overview"
-                    isExpanded={bottomExpanded}
-                    isCollapsed={topExpanded}
-                    onExpand={handleBottomExpand}
-                    onCollapse={handleCollapse}
-                    isLoading={bottomLoading}
-                />
-            </div>
+        <div className="h-[calc(90vh-5rem)] w-1/2 m-4 flex flex-col gap-4">
+            <Panel
+                title="Financial News"
+                isExpanded={topExpanded}
+                isCollapsed={bottomExpanded}
+                onExpand={handleTopExpand}
+                onCollapse={handleCollapse}
+                isLoading={topLoading}
+            >
+                {newsArticles.length ? (
+                    <div className="flex flex-col gap-2">
+                        {newsArticles.map((article, idx) => (
+                            <div key={idx} className="p-2 border-b border-gray-200 last:border-b-0">
+                                <a
+                                    href={article.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:underline font-medium"
+                                >
+                                    {article.title}
+                                </a>
+                                <p className="text-sm mt-1 text-gray-700">{article.summary}</p>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="p-2 text-sm text-gray-500">No news available</p>
+                )}
+            </Panel>
+            <Panel
+                title="AI Market Overview"
+                isExpanded={bottomExpanded}
+                isCollapsed={topExpanded}
+                onExpand={handleBottomExpand}
+                onCollapse={handleCollapse}
+                isLoading={bottomLoading}
+            />
         </div>
     )
 }
