@@ -17,7 +17,7 @@ export const api = {
 
     // Example: Get all stocks
     getAllStocks: async () => {
-        const response = await fetch(`${API_BASE_URL}/stocks`);
+        const response = await fetch(`${API_BASE_URL}/explore`);
         if (!response.ok) throw new Error('Failed to fetch stocks');
         return response.json();
     },
