@@ -443,7 +443,7 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
         cursor.execute("""
             SELECT ticker, name, currentPrice, costChange, percentageChange, last_updated
             FROM explore_stocks
-            ORDER BY ticker
+            ORDER BY currentPrice DESC
             LIMIT ? OFFSET ?
         """, (limit, offset))
 
