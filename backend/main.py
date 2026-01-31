@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 import boto3
-import json
+import re
 import yfinance as yf
 import sqlite3
 from pydantic import BaseModel
@@ -151,56 +151,135 @@ def fetch_price_data(tickers):
 
     return results
 
-
 def summarize_news_with_bedrock(ticker, news_texts, news_urls=None):
+    """
+    Summarizes news articles using AWS Bedrock Claude model.
+    Returns a dict with summary, sentiment, sources, and disclaimer.
+    """
+    if not news_texts or all(not text.strip() for text in news_texts):
+        return {
+            "summary": "No news content available to summarize.",
+            "sentiment": "neutral",
+            "sources": news_urls or [],
+            "disclaimer": "Summarized news. Not financial advice."
+        }
+
     # Ensure articles are trimmed to avoid overloading the context
-    cleaned_texts = [t[:2000] for t in news_texts[:5]]
+    cleaned_texts = [t[:2000] for t in news_texts[:5] if t and t.strip()]
+
+    if not cleaned_texts:
+        return {
+            "summary": "No valid news content after processing.",
+            "sentiment": "neutral",
+            "sources": news_urls or [],
+            "disclaimer": "Summarized news. Not financial advice."
+        }
+
     news_content = "\n\n".join(cleaned_texts)
 
     try:
+        # Call Bedrock with improved prompt
         resp = bedrock_runtime.converse(
             modelId=MODEL_ID,
-            messages=[{"role": "user", "content": [{"text": f"Summarize facts for {ticker}:\n{news_content}"}]}],
-            system=[{"text": "Return JSON with keys 'summary' and 'sentiment'. No other text."}],
-            inferenceConfig={"maxTokens": 600, "temperature": 0}
+            messages=[{
+                "role": "user",
+                "content": [{
+                    "text": f"""Analyze the following news articles about {ticker} and provide a summary.
+
+News Articles:
+{news_content}
+
+Provide your response as a JSON object with exactly two keys:
+1. "summary": A concise 2-3 sentence summary of the key facts and developments
+2. "sentiment": One of "positive", "negative", or "neutral"
+
+Return ONLY the JSON object, no other text."""
+                }]
+            }],
+            inferenceConfig={
+                "maxTokens": 600,
+                "temperature": 0.3
+            }
         )
 
-        # 1. THE CULPRIT CHECK: Print the raw output to your terminal
+        # Extract the response text
         raw_text = resp['output']['message']['content'][0]['text'].strip()
-        print(f"--- DEBUG RAW START ---\n{raw_text}\n--- DEBUG RAW END ---")
+        print(f"--- Bedrock Response for {ticker} ---")
+        print(raw_text)
+        print("--- End Response ---")
 
         if not raw_text:
-            return {"summary": "Model returned literally nothing.", "sentiment": "neutral"}
+            return {
+                "summary": "Model returned empty response.",
+                "sentiment": "neutral",
+                "sources": news_urls or [],
+                "disclaimer": "Summarized news. Not financial advice."
+            }
 
-        # 2. Aggressive JSON Extraction
-        # This handles: "Here is the JSON: {...}", ```json {...} ```, and plain {...}
-        json_pattern = r'\{.*\}'
-        match = re.search(json_pattern, raw_text, re.DOTALL)
-
-        if match:
-            try:
-                data = json.loads(match.group(0))
+        # Try to parse as JSON
+        # First, try to extract JSON from markdown code blocks
+        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            # Try to find JSON object directly
+            json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+            else:
+                # No JSON found, treat entire response as summary
                 return {
-                    "summary": data.get("summary", "Key 'summary' missing in JSON"),
-                    "sentiment": data.get("sentiment", "neutral"),
-                    "sources": news_urls or []
+                    "summary": raw_text[:500],  # Limit length
+                    "sentiment": "neutral",
+                    "sources": news_urls or [],
+                    "disclaimer": "Summarized news. Not financial advice."
                 }
-            except json.JSONDecodeError:
-                # If it's not valid JSON, just use the raw text as the summary
-                return {"summary": raw_text, "sentiment": "neutral", "sources": news_urls}
 
-        # 3. Fallback: If no curly braces were found at all
-        return {
-            "summary": raw_text,
-            "sentiment": "neutral",
-            "sources": news_urls,
-            "error": "Non-JSON response received"
-        }
+        # Parse the JSON
+        try:
+            data = json.loads(json_str)
+
+            # Validate required keys
+            summary = data.get("summary", "").strip()
+            sentiment = data.get("sentiment", "neutral").lower()
+
+            # Validate sentiment value
+            if sentiment not in ["positive", "negative", "neutral"]:
+                sentiment = "neutral"
+
+            if not summary:
+                summary = "No summary provided by model."
+
+            return {
+                "summary": summary,
+                "sentiment": sentiment,
+                "sources": news_urls or [],
+                "disclaimer": "Summarized news. Not financial advice."
+            }
+
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing error: {e}")
+            print(f"Attempted to parse: {json_str[:200]}")
+
+            # Fallback: use raw text as summary
+            return {
+                "summary": raw_text[:500],
+                "sentiment": "neutral",
+                "sources": news_urls or [],
+                "disclaimer": "Summarized news. Not financial advice."
+            }
 
     except Exception as e:
-        print(f"CRITICAL ERROR: {str(e)}")
-        return {"summary": f"Python Error: {str(e)}", "sentiment": "error"}
+        print(f"Bedrock API Error for {ticker}: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
+        return {
+            "summary": f"Error generating summary: {str(e)[:100]}",
+            "sentiment": "error",
+            "sources": news_urls or [],
+            "disclaimer": "Summarized news. Not financial advice."
+        }
 
 def update_explore_stocks():
     """
