@@ -100,6 +100,14 @@ class StockAnalysisResponse(BaseModel):
     sentiment: str
     disclaimer: str
 
+class PinnedStocksOverviewResponse(BaseModel):
+    userId: str
+    stock_count: int
+    overview: str
+    sentiment: str
+    individual_summaries: List[dict]
+    disclaimer: str
+
 # --- Helper Functions ---
 def fetch_price_data(tickers):
     """
@@ -1033,3 +1041,260 @@ async def analyze_stock(ticker: str, period: str = "1y"):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+# Add this helper function
+def generate_pinned_stocks_overview(userId: str, days: int = 7):
+    """
+    Generates an overview of all pinned stocks including news analysis.
+    Returns overview, sentiment, and individual stock summaries.
+    """
+    try:
+        # 1. Get user's pinned stocks
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT ticker, name FROM favorites WHERE user_id = ?",
+            (userId,)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            return {
+                "userId": userId,
+                "stock_count": 0,
+                "overview": "No pinned stocks found for this user.",
+                "sentiment": "neutral",
+                "individual_summaries": [],
+                "disclaimer": "No data available."
+            }
+
+        # 2. Collect news and summaries for each stock
+        individual_summaries = []
+        all_news_combined = []
+
+        for ticker, name in rows:
+            try:
+                # Get news for this ticker
+                news_response = get_company_news(ticker, days)
+                articles = news_response.get("articles", [])
+
+                if not articles:
+                    individual_summaries.append({
+                        "ticker": ticker,
+                        "name": name,
+                        "summary": "No recent news available.",
+                        "sentiment": "neutral",
+                        "article_count": 0
+                    })
+                    continue
+
+                # Extract news texts and URLs
+                news_texts = []
+                news_urls = []
+                for article in articles:
+                    if isinstance(article, dict):
+                        news_texts.append(article.get("summary", "") or "")
+                        news_urls.append(article.get("url", "") or "")
+                    else:
+                        news_texts.append(getattr(article, "summary", "") or "")
+                        news_urls.append(getattr(article, "url", "") or "")
+
+                # Get summary for this individual stock
+                stock_summary = summarize_news_with_bedrock(ticker, news_texts, news_urls)
+
+                individual_summaries.append({
+                    "ticker": ticker,
+                    "name": name,
+                    "summary": stock_summary.get("summary", "No summary available."),
+                    "sentiment": stock_summary.get("sentiment", "neutral"),
+                    "article_count": len(articles),
+                    "sources": stock_summary.get("sources", [])
+                })
+
+                # Combine for overall analysis
+                combined_text = f"{ticker} ({name}): {stock_summary.get('summary', '')}"
+                all_news_combined.append(combined_text)
+
+            except Exception as e:
+                print(f"Error processing {ticker}: {e}")
+                individual_summaries.append({
+                    "ticker": ticker,
+                    "name": name,
+                    "summary": f"Error retrieving news: {str(e)[:100]}",
+                    "sentiment": "neutral",
+                    "article_count": 0
+                })
+
+        # 3. Generate overall portfolio overview using Bedrock
+        if not all_news_combined:
+            return {
+                "userId": userId,
+                "stock_count": len(rows),
+                "overview": "Unable to generate overview due to lack of news data.",
+                "sentiment": "neutral",
+                "individual_summaries": individual_summaries,
+                "disclaimer": "This is automated analysis. Not financial advice."
+            }
+
+        portfolio_context = "\n\n".join(all_news_combined)
+
+        try:
+            resp = bedrock_runtime.converse(
+                modelId=MODEL_ID,
+                messages=[{
+                    "role": "user",
+                    "content": [{
+                        "text": f"""Analyze the following portfolio of {len(rows)} stocks and their recent news summaries:
+
+{portfolio_context}
+
+Provide your response as a JSON object with exactly two keys:
+1. "overview": A comprehensive 4-5 sentence overview of the entire portfolio covering:
+   - Overall market sentiment across the stocks
+   - Common themes or trends
+   - Notable individual stock performances
+   - Portfolio-level risks or opportunities
+
+2. "sentiment": Overall portfolio sentiment - one of "bullish", "bearish", or "neutral"
+
+Be specific and reference individual stocks where relevant.
+Return ONLY the JSON object, no other text."""
+                    }]
+                }],
+                inferenceConfig={
+                    "maxTokens": 1000,
+                    "temperature": 0.3
+                }
+            )
+
+            raw_text = resp['output']['message']['content'][0]['text'].strip()
+            print(f"--- Portfolio Overview Response ---")
+            print(raw_text)
+            print("--- End Response ---")
+
+            if not raw_text:
+                return {
+                    "userId": userId,
+                    "stock_count": len(rows),
+                    "overview": "Model returned empty response.",
+                    "sentiment": "neutral",
+                    "individual_summaries": individual_summaries,
+                    "disclaimer": "This is automated analysis. Not financial advice."
+                }
+
+            # Extract JSON from response
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0)
+                else:
+                    # No JSON found, use raw text as overview
+                    return {
+                        "userId": userId,
+                        "stock_count": len(rows),
+                        "overview": raw_text[:1000],
+                        "sentiment": "neutral",
+                        "individual_summaries": individual_summaries,
+                        "disclaimer": "This is automated analysis. Not financial advice."
+                    }
+
+            # Parse JSON
+            import json as json_module
+            data = json_module.loads(json_str)
+
+            overview_text = data.get("overview", "").strip()
+            sentiment = data.get("sentiment", "neutral").lower()
+
+            # Validate sentiment
+            if sentiment not in ["bullish", "bearish", "neutral"]:
+                sentiment = "neutral"
+
+            if not overview_text:
+                overview_text = "No overview provided by model."
+
+            return {
+                "userId": userId,
+                "stock_count": len(rows),
+                "overview": overview_text,
+                "sentiment": sentiment,
+                "individual_summaries": individual_summaries,
+                "disclaimer": "This is automated analysis based on recent news. Not financial advice."
+            }
+
+        except Exception as bedrock_error:
+            print(f"Bedrock error for portfolio overview: {bedrock_error}")
+            import traceback
+            traceback.print_exc()
+
+            # Fallback to basic overview
+            stock_names = [name for _, name in rows]
+            basic_overview = f"Portfolio contains {len(rows)} stocks: {', '.join(stock_names)}. "
+
+            # Count sentiments
+            sentiments = [s.get("sentiment", "neutral") for s in individual_summaries]
+            bullish_count = sentiments.count("positive") + sentiments.count("bullish")
+            bearish_count = sentiments.count("negative") + sentiments.count("bearish")
+
+            if bullish_count > bearish_count:
+                basic_overview += f"Overall sentiment is positive with {bullish_count} stocks showing bullish indicators."
+                portfolio_sentiment = "bullish"
+            elif bearish_count > bullish_count:
+                basic_overview += f"Overall sentiment is negative with {bearish_count} stocks showing bearish indicators."
+                portfolio_sentiment = "bearish"
+            else:
+                basic_overview += "Overall sentiment is mixed across the portfolio."
+                portfolio_sentiment = "neutral"
+
+            return {
+                "userId": userId,
+                "stock_count": len(rows),
+                "overview": basic_overview,
+                "sentiment": portfolio_sentiment,
+                "individual_summaries": individual_summaries,
+                "disclaimer": "Basic analysis only. AI-powered overview unavailable. Not financial advice."
+            }
+
+    except Exception as e:
+        print(f"Error generating portfolio overview: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error generating overview: {str(e)}")
+
+
+# Add this endpoint
+@app.get("/pinned/overview", response_model=PinnedStocksOverviewResponse)
+async def get_pinned_stocks_overview(userId: str, days: int = 7):
+    """
+    Get a comprehensive overview of all pinned stocks including news analysis.
+
+    Parameters:
+    - userId: User identifier (query parameter)
+    - days: Number of days to look back for news (default: 7)
+
+    Returns:
+    - userId: The user ID
+    - stock_count: Number of pinned stocks
+    - overview: AI-generated portfolio overview
+    - sentiment: Overall portfolio sentiment (bullish/bearish/neutral)
+    - individual_summaries: List of summaries for each stock
+    - disclaimer: Legal disclaimer
+    """
+    if not userId or not userId.strip():
+        raise HTTPException(status_code=400, detail="userId is required")
+
+    if days < 1 or days > 30:
+        raise HTTPException(status_code=400, detail="days must be between 1 and 30")
+
+    try:
+        result = generate_pinned_stocks_overview(userId.strip(), days)
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Overview generation failed: {str(e)}")
