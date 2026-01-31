@@ -4,16 +4,20 @@ import axios from 'axios';
 
 export const StockGraph = ({ ticker }) => {
     const [chartData, setChartData] = useState([]);
-    const [period, setPeriod] = useState('1mo'); // Default to 1 Month
+    const [activeTimeframe, setActiveTimeframe] = useState({ 
+        label: '1M', 
+        period: '1mo', 
+        interval: '1d' 
+    });
     const [loading, setLoading] = useState(false);
 
     const timeframes = [
-        { label: '1D', value: '1d' },
-        { label: '1W', value: '5d' },
-        { label: '1M', value: '1mo' },
-        { label: '1Y', value: '1y' },
-        { label: '5Y', value: '5y' },
-        { label: 'MAX', value: 'max' },
+        { label: '1D', period: '1d', interval: "5m" },
+        { label: '1W', period: '5d', interval: "15m" },
+        { label: '1M', period: '1mo', interval: "1d" },
+        { label: '1Y', period: '1y', interval: "1d" },
+        { label: '5Y', period: '5y', interval: "5d" },
+        { label: 'MAX', period: 'max', interval: "1mo" },
     ];
 
     useEffect(() => {
@@ -21,7 +25,15 @@ export const StockGraph = ({ ticker }) => {
             if (!ticker) return;
             setLoading(true);
             try {
-                const response = await axios.get(`http://ec2-3-142-36-77.us-east-2.compute.amazonaws.com:8000/stock/${ticker}/${period}`);
+                const response = await axios.get(
+                    `http://ec2-3-142-36-77.us-east-2.compute.amazonaws.com:8000/stock/${ticker}`, 
+                    {
+                        params: {
+                            period: activeTimeframe.period,
+                            interval: activeTimeframe.interval
+                        }
+                    }
+                );
                 
                 // Transform FastAPI data for ApexCharts Area Chart
                 const formattedData = response.data.history.map(item => [
@@ -38,7 +50,7 @@ export const StockGraph = ({ ticker }) => {
         };
 
         fetchStockData();
-    }, [ticker, period]);
+    }, [ticker, activeTimeframe]);
 
     const chartOptions = {
         chart: {
@@ -73,7 +85,11 @@ export const StockGraph = ({ ticker }) => {
         },
         colors: ['#3b82f6'], // Blue-500
         grid: { borderColor: '#334155' }, // Slate-700
-        tooltip: { theme: 'dark' }
+        tooltip: {
+            theme: 'dark',
+            x: { format: 'dd MMM yyyy HH:mm' } 
+        }
+        
     };
 
     if (!ticker) return <div className="p-10 text-slate-400">Select a stock to view insights.</div>;
@@ -85,10 +101,10 @@ export const StockGraph = ({ ticker }) => {
                 <div className="flex gap-2 bg-slate-800 p-1 rounded-lg">
                     {timeframes.map((tf) => (
                         <button
-                            key={tf.value}
-                            onClick={() => setPeriod(tf.value)}
+                            key={tf.label}
+                            onClick={() => setActiveTimeframe(tf)}
                             className={`px-3 py-1 rounded-md text-sm font-medium transition ${
-                                period === tf.value 
+                                activeTimeframe.label === tf.label
                                 ? 'bg-blue-600 text-white' 
                                 : 'text-slate-400 hover:bg-slate-700'
                             }`}
