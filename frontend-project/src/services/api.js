@@ -15,6 +15,17 @@ export const api = {
         return response.json();
     },
 
+    addPinned: async (ticker) => {
+        const response = await fetch(`${API_BASE_URL}/pinned/${ticker}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        if (!response.ok) throw new Error('Failed to add pinned stock');
+        return response.json();
+    },
+
     removePinned: async (ticker) => {
         const response = await fetch(`${API_BASE_URL}/pinned/${ticker}`, {
             method: 'DELETE',
@@ -27,10 +38,11 @@ export const api = {
     },
 
     // Example: Get all stocks
-    getAllStocks: async () => {
-        const response = await fetch(`${API_BASE_URL}/explore`);
+    getAllStocks: async (limit = 500, offset = 0) => {
+        const response = await fetch(`${API_BASE_URL}/explore?limit=${limit}&offset=${offset}`);
         if (!response.ok) throw new Error('Failed to fetch stocks');
-        return response.json();
+        const data = await response.json();
+        return data.stocks; // Extract the stocks array from the response
     },
 
     // Add more API calls as needed
