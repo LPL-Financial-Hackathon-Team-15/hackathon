@@ -837,7 +837,7 @@ async def summarize_news(request: NewsSummaryRequest):
         raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
 
 # Update the helper function
-def analyze_stock_performance(ticker, period="1y"):
+async def analyze_stock_performance(ticker, period="1y"):
     """
     Analyzes historical stock performance using price data and AWS Bedrock.
     Returns analysis, sentiment, and disclaimer.
@@ -1044,7 +1044,7 @@ async def analyze_stock(ticker: str, period: str = "1y"):
 
 
 # Add this helper function
-def generate_pinned_stocks_overview(userId: str, days: int = 7):
+async def generate_pinned_stocks_overview(userId: str, days: int = 7):
     """
     Generates an overview of all pinned stocks including news analysis.
     Returns overview, sentiment, and individual stock summaries.
