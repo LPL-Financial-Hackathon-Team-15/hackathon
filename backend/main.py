@@ -754,8 +754,8 @@ def delete_pinned(ticker: str, userId: str):
             raise e
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-@app.get("/explore")
-def get_explore_stocks(limit: int = 100, offset: int = 0):
+@app.get("/explore/{userId}")
+def get_explore_stocks(userId: str = None, limit: int = 100, offset: int = 0):
     """
     Get explore stocks from cached database.
     Much faster than fetching from yfinance every time.
@@ -764,17 +764,35 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
 
-        # Get total count
-        cursor.execute("SELECT COUNT(*) FROM explore_stocks")
-        total_count = cursor.fetchone()[0]
+        if userId:
+            # Get total count excluding pinned
+            cursor.execute("""
+                SELECT COUNT(*) 
+                FROM explore_stocks 
+                WHERE ticker NOT IN (SELECT ticker FROM favorites WHERE user_id = ?)
+            """, (userId,))
+            total_count = cursor.fetchone()[0]
 
-        # Get paginated results
-        cursor.execute("""
-            SELECT ticker, name, currentPrice, costChange, percentageChange, last_updated
-            FROM explore_stocks
-            ORDER BY currentPrice DESC
-            LIMIT ? OFFSET ?
-        """, (limit, offset))
+            # Get paginated results excluding pinned
+            cursor.execute("""
+                SELECT ticker, name, currentPrice, costChange, percentageChange, last_updated
+                FROM explore_stocks
+                WHERE ticker NOT IN (SELECT ticker FROM favorites WHERE user_id = ?)
+                ORDER BY currentPrice DESC
+                LIMIT ? OFFSET ?
+            """, (userId, limit, offset))
+        else:
+            # Get total count
+            cursor.execute("SELECT COUNT(*) FROM explore_stocks")
+            total_count = cursor.fetchone()[0]
+
+            # Get paginated results
+            cursor.execute("""
+                SELECT ticker, name, currentPrice, costChange, percentageChange, last_updated
+                FROM explore_stocks
+                ORDER BY currentPrice DESC
+                LIMIT ? OFFSET ?
+            """, (limit, offset))
 
         rows = cursor.fetchall()
         conn.close()
