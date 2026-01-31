@@ -1,87 +1,74 @@
 #!/usr/bin/env python3
 import boto3
 import time
-import json
+import traceback
+import sys
 
-# Use bedrock-agent-runtime for guardrails (not bedrock-runtime)
-bedrock_agent = boto3.client('bedrock-agent-runtime', region_name='us-east-2')  # Your region
+print("🔍 Testing AWS credentials...")
+try:
+    sts = boto3.client('sts', region_name='us-east-1')
+    identity = sts.get_caller_identity()
+    print(f"✅ Credentials: {identity['Arn']}")
+except Exception as e:
+    print(f"❌ Credentials FAILED: {e}")
+    sys.exit(1)
 
-# Create guardrail
-response = bedrock_agent.create_guardrail(
-    name='stock-news-no-advice',
-    description='Blocks investment advice for LPL Financial stock news summarizer hackathon',
-    topic_policy_config={
-        'topics_config': [
-            {
-                'name': 'Investment Advice',
-                'definition': 'Providing personalized advice, recommendations, or guidance about managing financial assets, investments, stocks, or achieving financial objectives.',
-                'examples': [
-                    'Should I buy AAPL stock?',
-                    'Is TSLA a good investment?',
-                    'What stocks should I buy?',
-                    'Sell my portfolio?',
-                    'Buy/sell/hold recommendation',
-                    'Allocate my 401k to tech stocks',
-                    'Price target for NVDA',
-                    'Strong buy rating'
-                ],
-                'type': 'DENY'
-            },
-            {
-                'name': 'Trading Recommendations',
-                'definition': 'Any guidance on buying, selling, or trading specific securities or timing the market.',
-                'examples': [
-                    'When should I sell my shares?',
-                    'Time to buy the dip?',
-                    'Portfolio allocation advice',
-                    'Day trading strategy for SPY'
-                ],
-                'type': 'DENY'
-            }
-        ]
-    },
-    content_policy_config={
-        'filters_config': [
-            {'type': 'HATE', 'input_strength': 'HIGH', 'output_strength': 'HIGH'},
-            {'type': 'INSULTS', 'input_strength': 'HIGH', 'output_strength': 'HIGH'},
-            {'type': 'SEXUAL', 'input_strength': 'HIGH', 'output_strength': 'HIGH'},
-            {'type': 'VIOLENCE', 'input_strength': 'HIGH', 'output_strength': 'HIGH'},
-            {'type': 'PROMPT_ATTACK', 'input_strength': 'HIGH', 'output_strength': 'NONE'}
-        ]
-    },
-    word_policy_config={
-        'words_config': [
-            {'text': 'buy this stock'}, {'text': 'sell now'}, {'text': 'strong buy'},
-            {'text': 'portfolio advice'}, {'text': 'investment recommendation'}
-        ]
-    },
-    blocked_input_messaging='I can summarize news but cannot provide investment advice. Ask about factual news content only.',
-    blocked_outputs_messaging='Summary filtered for compliance: no investment advice allowed. This is informational only.',
-    tags=[
-        {'key': 'hackathon', 'value': 'lpl-financial-aws'},
-        {'key': 'purpose', 'value': 'block-financial-advice'}
-    ]
-)
+print("\n🔍 Testing Bedrock...")
+try:
+    bedrock = boto3.client('bedrock', region_name='us-east-1')
+    print("✅ Bedrock client OK")
+except Exception as e:
+    print(f"❌ Bedrock client FAILED: {e}")
+    sys.exit(1)
 
-guardrail_id = response['guardrailId']
-guardrail_arn = response['guardrailArn']
-print(f"✅ Guardrail created!")
-print(f"ID: {guardrail_id}")
-print(f"ARN: {guardrail_arn}")
+print("\n🚀 Creating Guardrail...")
+try:
+    response = bedrock.create_guardrail(
+        name='stock-news-no-advice-hackathon',
+        description='Blocks financial advice for LPL AWS hackathon',
 
-print("\n⏳ Waiting 60s for guardrail to become active...")
-time.sleep(60)
+        # FIXED: camelCase parameter names
+        topicPolicyConfig={
+            'topicsConfig': [  # camelCase
+                {
+                    'name': 'Investment Advice',
+                    'definition': 'Personalized financial advice or stock recommendations.',
+                    'examples': [
+                        'Should I buy AAPL?',
+                        'Is TSLA a good investment?',
+                        'Buy/sell/hold recommendation'
+                    ],
+                    'type': 'DENY'
+                }
+            ]
+        },
+        contentPolicyConfig={
+            'filtersConfig': [  # camelCase
+                {'type': 'HATE', 'input_strength': 'HIGH', 'output_strength': 'HIGH'},
+                {'type': 'VIOLENCE', 'input_strength': 'HIGH', 'output_strength': 'HIGH'}
+            ]
+        },
 
-# Create a version (recommended for production use)
-version_response = bedrock_agent.create_guardrail_version(
-    guardrail_identifier=guardrail_id,
-    description='Version 1 for hackathon deployment'
-)
-guardrail_version = version_response['guardrailVersion']
-print(f"✅ Version created: {guardrail_version}")
+        # FIXED: camelCase
+        blockedInputMessaging='Cannot provide investment advice. Ask about news summaries.',
+        blockedOutputsMessaging='Response filtered: no financial advice allowed.'
+    )
 
-print("\n🎉 Copy these to your FastAPI code:")
-print(f"GUARDRAIL_ID = '{guardrail_id}'")
-print(f"GUARDRAIL_VERSION = '{guardrail_version}'")  # Use this instead of 'DRAFT'
+    guardrail_id = response['guardrailId']
+    print(f"\n✅ SUCCESS!")
+    print(f"Guardrail ID: {guardrail_id}")
 
-print("\n🔍 Test it in AWS Console: Bedrock > Guardrails > stock-news-no-advice")
+    print("⏳ Waiting 60s...")
+    time.sleep(60)
+
+    version_resp = bedrock.create_guardrail_version(guardrail_identifier=guardrail_id)
+    version = version_resp['guardrailVersion']
+    print(f"Version: {version}")
+
+    print("\n📋 COPY TO FASTAPI:")
+    print(f"GUARDRAIL_ID = '{guardrail_id}'")
+    print(f"GUARDRAIL_VERSION = '{version}'")
+
+except Exception as e:
+    print(f"❌ FAILED: {e}")
+    traceback.print_exc()
