@@ -605,7 +605,7 @@ def add_pinned(ticker: str, userId: str):
 
 
 @app.get("/pinned/{userId}")
-def get_pinned(userId: str):
+async def get_pinned(userId: str):
     """
     Get all pinned stocks for a specific user.
 
@@ -638,7 +638,7 @@ def get_pinned(userId: str):
         ticker_to_name = {row[0]: row[1] for row in rows}
 
         # Fetch price data
-        price_data = fetch_price_data(tickers)
+        price_data = await fetch_price_data(tickers)
 
         # Build response
         favorites_data = []
