@@ -216,6 +216,8 @@ def update_explore_stocks():
 # Initialize scheduler
 scheduler = BackgroundScheduler()
 
+app = FastAPI()
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
@@ -235,8 +237,6 @@ async def shutdown_event():
     print("Background scheduler stopped")
 
 
-# --- FastAPI App ---
-app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
