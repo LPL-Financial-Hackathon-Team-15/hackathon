@@ -169,7 +169,7 @@ def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: L
     news_content = "\n\n".join([f"Article {i + 1}: {text}" for i, text in enumerate(news_texts)])
 
     system_prompt = (
-        f"You are a financial analyst. Summarize news for {ticker}. "
+        f"You are a state of the art ai assistant, tasked with summarizing news articles for {ticker}. "
         "Return ONLY a JSON object with 'summary' and 'sentiment' keys. "
         "Do not use markdown formatting."
     )
