@@ -604,7 +604,7 @@ def add_pinned(ticker: str, userId: str):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 
-@app.get("/pinned")
+@app.get("/pinned/{userId}")
 def get_pinned(userId: str):
     """
     Get all pinned stocks for a specific user.
