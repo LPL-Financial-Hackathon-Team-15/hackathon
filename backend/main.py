@@ -621,12 +621,21 @@ def add_pinned(ticker: str, userId: str):
 
 @app.get("/pinned")
 def get_pinned(userId: str):
+    """
+    Get all pinned stocks for a specific user.
+
+    Parameters:
+    - userId: User identifier (query parameter)
+
+    Returns list of user's favorite stocks with current price data
+    """
     if not userId or not userId.strip():
         raise HTTPException(status_code=400, detail="userId is required")
 
     user_id = userId.strip()
 
     try:
+        # Get favorited tickers from the database for this user
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         cursor.execute(
@@ -636,66 +645,67 @@ def get_pinned(userId: str):
         rows = cursor.fetchall()
         conn.close()
 
-        print(f"Found {len(rows)} favorites for user {user_id}")  # DEBUG
-
         if not rows:
             return []
 
-        favorites_data = []
+        # Extract tickers and create lookup
         tickers = [row[0] for row in rows]
-        ticker_map = {row[0]: row[1] for row in rows}
+        ticker_to_name = {row[0]: row[1] for row in rows}
 
-        print(f"Fetching prices for tickers: {tickers}")  # DEBUG
-
-        # Bulk fetch price data
+        # Fetch price data
         price_data = fetch_price_data(tickers)
 
-        print(f"Price data received: {price_data}")  # DEBUG
+        # Build response
+        favorites_data = []
 
-        # Construct response
-        for ticker in tickers:
-            stock_name = ticker_map[ticker]
+        for ticker_symbol in tickers:
+            stock_name = ticker_to_name[ticker_symbol]
 
-            if ticker in price_data:
-                current_price, previous_close = price_data[ticker]
-
-                print(f"{ticker}: current={current_price}, previous={previous_close}")  # DEBUG
-
-                if current_price is not None and previous_close is not None:
-                    day_change_usd = current_price - previous_close
-                    day_change_percent = (day_change_usd / previous_close) * 100
-
-                    favorites_data.append({
-                        "ticker": ticker,
-                        "name": stock_name,
-                        "currentPrice": round(current_price, 2),
-                        "costChange": round(day_change_usd, 2),
-                        "percentageChange": round(day_change_percent, 2)
-                    })
-                else:
-                    favorites_data.append({
-                        "ticker": ticker,
-                        "name": stock_name,
-                        "currentPrice": round(current_price, 2) if current_price else None,
-                        "costChange": None,
-                        "percentageChange": None,
-                        "error": "Insufficient price data"
-                    })
-            else:
-                print(f"{ticker}: NOT in price_data")  # DEBUG
+            # Check if we have price data for this ticker
+            if ticker_symbol not in price_data:
                 favorites_data.append({
-                    "ticker": ticker,
+                    "ticker": ticker_symbol,
                     "name": stock_name,
                     "currentPrice": None,
                     "costChange": None,
                     "percentageChange": None,
                     "error": "Price data unavailable"
                 })
+                continue
+
+            # Extract prices
+            price_tuple = price_data[ticker_symbol]
+            current_price = price_tuple[0]
+            previous_close = price_tuple[1]
+
+            # Validate prices exist
+            if current_price is None or previous_close is None:
+                favorites_data.append({
+                    "ticker": ticker_symbol,
+                    "name": stock_name,
+                    "currentPrice": round(current_price, 2) if current_price is not None else None,
+                    "costChange": None,
+                    "percentageChange": None,
+                    "error": "Insufficient price data"
+                })
+                continue
+
+            # Calculate changes
+            cost_change = current_price - previous_close
+            percentage_change = (cost_change / previous_close) * 100
+
+            # Add to results
+            favorites_data.append({
+                "ticker": ticker_symbol,
+                "name": stock_name,
+                "currentPrice": round(current_price, 2),
+                "costChange": round(cost_change, 2),
+                "percentageChange": round(percentage_change, 2)
+            })
 
         return favorites_data
 
     except Exception as e:
-        print(f"Error in get_pinned: {str(e)}")  # DEBUG
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
