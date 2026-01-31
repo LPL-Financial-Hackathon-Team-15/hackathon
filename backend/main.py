@@ -155,6 +155,14 @@ def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: L
     Summarizes provided news using Bedrock + Guardrails.
     Returns JSON or error.
     """
+    if not news_texts:
+        return {
+            "summary": "No news articles found to summarize.",
+            "key_themes": [],
+            "sentiment": "neutral",
+            "disclaimer": "No data available."
+        }
+
     if news_urls and len(news_urls) == len(news_texts):
         news_content = "\n\n".join([f"Article {i + 1}:\nSource: {news_urls[i]}\nContent: {text}" for i, text in enumerate(news_texts)])
     else:
@@ -163,7 +171,7 @@ def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: L
     system_prompt = f"""You find and summarize recent news about {ticker}. 
 Be factual: extract key events, sentiments, themes. 
 Do NOT give buy/sell/hold advice, price targets, or portfolio suggestions.
-Output ONLY valid JSON: {{"summary": "brief overall summary", "sources": ["url1", "url2"], "sentiment": "neutral|positive|negative"}}"""
+Output ONLY valid JSON: {{"summary": "brief overall summary", "key_themes": ["theme1", "theme2"], "sentiment": "neutral|positive|negative"}}"""
 
     messages = [{"role": "user", "content": [{"text": f"Summarize these articles:\n{news_content}"}]}]
 
@@ -559,6 +567,14 @@ async def get_summarized_news(ticker: str, period: int = 7):
     news = get_company_news(ticker, period)
     articles = news.get("articles", [])
     
+    if not articles:
+        return {
+            "summary": "No recent news found for this ticker.",
+            "key_themes": [],
+            "sentiment": "neutral",
+            "disclaimer": "No data available."
+        }
+
     news_texts = []
     news_urls = []
     
