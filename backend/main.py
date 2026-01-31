@@ -38,12 +38,14 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    # Create favorites table
+    # Create favorites table with userId
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS favorites (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ticker TEXT NOT NULL UNIQUE,
-            name TEXT NOT NULL
+            user_id TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            name TEXT NOT NULL,
+            UNIQUE(user_id, ticker)
         )
     """)
 
@@ -59,8 +61,6 @@ def init_db():
         )
     """)
 
-    conn.commit()
-    conn.close()
 
 # --- Pydantic Models ---
 class StockFavorite(BaseModel):
@@ -390,7 +390,6 @@ async def shutdown_event():
     print("Background scheduler stopped")
 
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -399,9 +398,77 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add this as a one-time migration function (call it before init_db on first run)
+def migrate_favorites_table():
+    """
+    Migrate existing favorites table to include user_id column.
+    This is a one-time migration.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    try:
+        # Check if the old table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'")
+        if cursor.fetchone():
+            # Check if user_id column exists
+            cursor.execute("PRAGMA table_info(favorites)")
+            columns = [column[1] for column in cursor.fetchall()]
+
+            if 'user_id' not in columns:
+                print("Migrating favorites table...")
+
+                # Rename old table
+                cursor.execute("ALTER TABLE favorites RENAME TO favorites_old")
+
+                # Create new table with user_id
+                cursor.execute("""
+                               CREATE TABLE favorites
+                               (
+                                   id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                                   user_id TEXT NOT NULL,
+                                   ticker  TEXT NOT NULL,
+                                   name    TEXT NOT NULL,
+                                   UNIQUE (user_id, ticker)
+                               )
+                               """)
+
+                # Migrate data with a default user_id
+                cursor.execute("""
+                               INSERT INTO favorites (user_id, ticker, name)
+                               SELECT 'default_user', ticker, name
+                               FROM favorites_old
+                               """)
+
+                # Drop old table
+                cursor.execute("DROP TABLE favorites_old")
+
+                conn.commit()
+                print("Migration completed successfully!")
+            else:
+                print("Table already has user_id column, no migration needed.")
+
+    except Exception as e:
+        print(f"Migration error: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
 @app.on_event("startup")
 async def startup_event():
+    # Run migration first (only needed once)
+    # migrate_favorites_table()  # Uncomment this line for one-time migration
+
     init_db()
+
+    # Run initial update
+    threading.Thread(target=update_explore_stocks).start()
+
+    # Schedule updates every 10 minutes
+    scheduler.add_job(update_explore_stocks, 'interval', minutes=10)
+    scheduler.start()
+
+    print("Background scheduler started - explore stocks will update every 10 minutes")
 
 @app.post("/webhook")
 async def github_webhook(request: Request):
@@ -466,9 +533,21 @@ def get_stock_history(ticker: str, period: str = "1mo", interval: str = "1d"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/pinned/{ticker}")
-def add_pinned(ticker: str):
+
+@app.post("/pinned/{userId}/{ticker}")
+def add_pinned(ticker: str, userId: str):
+    """
+    Add a stock to user's favorites.
+
+    Parameters:
+    - ticker: Stock ticker symbol
+    - userId: User identifier
+    """
+    if not userId or not userId.strip():
+        raise HTTPException(status_code=400, detail="userId is required")
+
     ticker_symbol = ticker.upper()
+    user_id = userId.strip()
 
     try:
         # Fetch stock info to get the name
@@ -485,30 +564,58 @@ def add_pinned(ticker: str):
         cursor = conn.cursor()
 
         try:
-            cursor.execute("INSERT INTO favorites (ticker, name) VALUES (?, ?)", (ticker_symbol, stock_name))
+            cursor.execute(
+                "INSERT INTO favorites (user_id, ticker, name) VALUES (?, ?, ?)",
+                (user_id, ticker_symbol, stock_name)
+            )
             conn.commit()
         except sqlite3.IntegrityError:
-            # This error occurs if the ticker is already in the database (due to UNIQUE constraint)
+            # This error occurs if the ticker is already in the database for this user
             conn.close()
-            raise HTTPException(status_code=409, detail=f"Ticker '{ticker_symbol}' is already in favorites.")
+            raise HTTPException(
+                status_code=409,
+                detail=f"Ticker '{ticker_symbol}' is already in favorites for user '{user_id}'."
+            )
 
         conn.close()
 
-        return {"message": f"Added '{stock_name} ({ticker_symbol})' to favorites."}
+        return {
+            "message": f"Added '{stock_name} ({ticker_symbol})' to favorites for user '{user_id}'.",
+            "userId": user_id,
+            "ticker": ticker_symbol,
+            "name": stock_name
+        }
 
     except Exception as e:
         # Catch-all for other potential errors (e.g., yfinance exceptions, db connection issues)
         if isinstance(e, HTTPException):
-            raise e # Re-raise HTTPException so FastAPI handles it
+            raise e
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-@app.get("/pinned")
-def get_pinned():
+
+@app.get("/pinned/{userId}")
+def get_pinned(userId: str):
+    """
+    Get all pinned stocks for a specific user.
+
+    Parameters:
+    - userId: User identifier (query parameter)
+
+    Returns list of user's favorite stocks with current price data
+    """
+    if not userId or not userId.strip():
+        raise HTTPException(status_code=400, detail="userId is required")
+
+    user_id = userId.strip()
+
     try:
-        # 1. Get favorited tickers from the database
+        # 1. Get favorited tickers from the database for this user
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        cursor.execute("SELECT ticker, name FROM favorites")
+        cursor.execute(
+            "SELECT ticker, name FROM favorites WHERE user_id = ?",
+            (user_id,)
+        )
         rows = cursor.fetchall()
         conn.close()
 
@@ -541,7 +648,7 @@ def get_pinned():
                         "percentageChange": round(day_change_percent, 2)
                     })
                 else:
-                     favorites_data.append({
+                    favorites_data.append({
                         "ticker": ticker,
                         "name": stock_name,
                         "currentPrice": round(current_price, 2) if current_price else None,
@@ -564,25 +671,50 @@ def get_pinned():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-@app.delete("/pinned/{ticker}")
-def delete_pinned(ticker: str):
+
+@app.delete("/pinned/{userId}/{ticker}")
+def delete_pinned(ticker: str, userId: str):
+    """
+    Remove a stock from user's favorites.
+
+    Parameters:
+    - ticker: Stock ticker symbol
+    - userId: User identifier (query parameter)
+    """
+    if not userId or not userId.strip():
+        raise HTTPException(status_code=400, detail="userId is required")
+
     ticker_symbol = ticker.upper()
+    user_id = userId.strip()
 
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
 
-        # Check if ticker exists first
-        cursor.execute("SELECT ticker FROM favorites WHERE ticker = ?", (ticker_symbol,))
+        # Check if ticker exists for this user
+        cursor.execute(
+            "SELECT ticker FROM favorites WHERE user_id = ? AND ticker = ?",
+            (user_id, ticker_symbol)
+        )
         if cursor.fetchone() is None:
             conn.close()
-            raise HTTPException(status_code=404, detail=f"Ticker '{ticker_symbol}' not found in favorites.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Ticker '{ticker_symbol}' not found in favorites for user '{user_id}'."
+            )
 
-        cursor.execute("DELETE FROM favorites WHERE ticker = ?", (ticker_symbol,))
+        cursor.execute(
+            "DELETE FROM favorites WHERE user_id = ? AND ticker = ?",
+            (user_id, ticker_symbol)
+        )
         conn.commit()
         conn.close()
 
-        return {"message": f"Removed '{ticker_symbol}' from favorites."}
+        return {
+            "message": f"Removed '{ticker_symbol}' from favorites for user '{user_id}'.",
+            "userId": user_id,
+            "ticker": ticker_symbol
+        }
 
     except Exception as e:
         if isinstance(e, HTTPException):
