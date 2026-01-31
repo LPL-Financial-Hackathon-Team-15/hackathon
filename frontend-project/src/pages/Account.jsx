@@ -28,8 +28,6 @@ export default function AccountPage() {
                         title="Account Information"
                         isExpanded={true} // Always expanded vertically since it's the only panel
                         isCollapsed={false}
-                        onExpand={() => {}} 
-                        onCollapse={() => {}}
                         isLoading={loading}
                     >
                         <div className="flex flex-col gap-8 h-full overflow-y-auto pr-2">
@@ -91,8 +89,6 @@ export default function AccountPage() {
                         title="Settings & Security"
                         isExpanded={true}
                         isCollapsed={false}
-                        onExpand={() => {}}
-                        onCollapse={() => {}}
                         isLoading={loading}
                     >
                         <div className="flex flex-col gap-8 h-full overflow-y-auto pr-2">
