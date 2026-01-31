@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Chart from 'react-apexcharts';
 import axios from 'axios';
+import LoadingSpinner from "./LoadingSpinner.jsx";
 
 export const StockGraph = ({ ticker, change }) => {
     const [chartData, setChartData] = useState([]);
@@ -102,15 +103,15 @@ export const StockGraph = ({ ticker, change }) => {
             <div className="flex items-center justify-between p-4 flex-shrink-0 border-b border-gray-200">
 
                     <h2 className="text-2xl font-bold text-[#07407b]">{ticker}</h2>
-                    <div className="flex gap-2 bg-slate-800 p-1 rounded-lg">
+                    <div className="flex gap-2 bg-[#07407b] p-1 rounded-lg">
                         {timeframes.map((tf) => (
                             <button
                                 key={tf.label}
                                 onClick={() => setActiveTimeframe(tf)}
                                 className={`px-3 py-1 rounded-md text-sm font-medium transition ${
                                     activeTimeframe.label === tf.label
-                                    ? 'bg-blue-600 text-white' 
-                                    : 'text-slate-400 hover:bg-slate-700'
+                                        ? 'bg-white text-[#07407b]'
+                                        : 'text-white hover:bg-[#0a5091]'
                                 }`}
                             >
                                 {tf.label}
@@ -121,8 +122,8 @@ export const StockGraph = ({ ticker, change }) => {
             </div>
 
             {loading ? (
-                <div className="flex items-center justify-center text-blue-500">
-                    Loading chart...
+                <div className="flex-1 flex items-center justify-center p-4">
+                    <LoadingSpinner />
                 </div>
             ) : (
                 <div className="h-full">
