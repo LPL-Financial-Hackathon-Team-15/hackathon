@@ -469,7 +469,7 @@ async def github_webhook(request: Request):
 async def read_root():
     ticker = yf.Ticker("AAPL")
     hist = ticker.history(period="5d")
-    return {"message": hist}
+    return {"message": hist.to_dict()}
 @app.get("/news/company/{ticker}", response_model=CompanyNewsResponse)
 def get_company_news(
     ticker: str,
