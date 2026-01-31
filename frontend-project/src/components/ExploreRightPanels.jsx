@@ -42,11 +42,8 @@ export default function ExploreRightPanels({ onSearch }) {
 
     return (
         <div className="h-[calc(90vh-5rem)] m-4 flex flex-col gap-4 flex-1">
-            {/* Search Bar */}
-
-
             {/* Data Panels */}
-            <div className="flex-1 flex flex-col gap-4">
+            <div className="min-h-0 flex-1 flex flex-col gap-4">
                 <SearchBar onSearch={onSearch} />
                 <Panel
                     title="Financial News"
