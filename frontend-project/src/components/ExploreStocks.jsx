@@ -4,29 +4,29 @@ import StockCard from './StockCard'
 import {api} from "../services/api.js";
 
 export default function ExploreStocks({ searchResults }) {
-    const [pinnedStocks, setPinnedStocks] = useState([])
+    const [stocks, setStocks] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
 
     useEffect(() => {
-        const fetchPinnedStocks = async () => {
+        const fetchAllStocks = async () => {
             try {
                 setLoading(true)
-                const data = await api.getPinned()
-                setPinnedStocks(data)
+                const data = await api.getAllStocks()
+                setStocks(data)
             } catch (err) {
-                console.error('Error fetching pinned stocks:', err)
+                console.error('Error fetching stocks:', err)
                 setError(err.message)
             } finally {
                 setLoading(false)
             }
         }
 
-        fetchPinnedStocks()
+        fetchAllStocks()
     }, [])
 
     const handleDelete = (index) => {
-        setPinnedStocks(pinnedStocks.filter((_, i) => i !== index))
+        setStocks(stocks.filter((_, i) => i !== index))
     }
 
     const handlePin = (index) => {
@@ -38,7 +38,7 @@ export default function ExploreStocks({ searchResults }) {
         return (
             <div className="h-[calc(90vh-5rem)] w-1/2 rounded-2xl bg-gray-50 border-r border-gray-200 m-4 flex flex-col">
                 <div className="bg-gray-50 border-b rounded-t-2xl border-gray-200 p-4">
-                    <h2 className="text-xl  font-bold text-[#07407b]">Pinned Stocks</h2>
+                    <h2 className="text-xl  font-bold text-[#07407b]">Explore Stocks</h2>
                 </div>
                 <div className="flex-1 flex items-center justify-center">
                     <div className="relative w-16 h-16">
@@ -54,7 +54,7 @@ export default function ExploreStocks({ searchResults }) {
         return (
             <div className="h-[calc(90vh-5rem)] w-1/2 rounded-2xl bg-gray-50 border-r border-gray-200 m-4 flex flex-col">
                 <div className="bg-gray-50 border-b rounded-t-2xl border-gray-200 p-4">
-                    <h2 className="text-xl font-bold text-[#07407b]">Pinned Stocks</h2>
+                    <h2 className="text-xl font-bold text-[#07407b]">Explore Stocks</h2>
                 </div>
                 <div className="flex-1 flex items-center justify-center">
                     <div className="text-red-600">Error loading stocks: {error}</div>
@@ -67,7 +67,7 @@ export default function ExploreStocks({ searchResults }) {
         <div className="h-[calc(90vh-5rem)] w-1/2 bg-gray-50 border-r border-gray-200 rounded-2xl m-4 flex flex-col">
             {/* Header - Fixed */}
             <div className="bg-gray-50 border-b rounded-t-2xl border-gray-200 p-4">
-                <h2 className="text-xl font-bold text-[#07407b]">Search Results</h2>
+                <h2 className="text-xl font-bold text-[#07407b]">Explore Stocks</h2>
             </div>
 
             {/* Stock Cards - Scrollable */}
