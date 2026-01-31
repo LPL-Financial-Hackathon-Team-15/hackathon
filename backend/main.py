@@ -151,41 +151,30 @@ def fetch_price_data(tickers):
 
     return results
 
-
-# NEW: Bedrock summarizer with guardrails
-import re
-import json
+from typing import List
 
 
 def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: List[str] = None) -> dict:
-    """
-    Handles the heavy lifting of talking to AWS Bedrock.
-    """
-    # 1. Limit input size to prevent 'Invalid Format' errors from model truncation
-    MAX_ARTICLES = 10
-    news_texts = news_texts[:MAX_ARTICLES]
+    # 1. Strict Input Management
+    MAX_ARTICLES = 5  # Reduce to 5 for high-volume tickers like AAPL
+    MAX_CHARS_PER_ARTICLE = 2000
+
+    news_texts = [text[:MAX_CHARS_PER_ARTICLE] for text in news_texts[:MAX_ARTICLES]]
     news_urls = news_urls[:MAX_ARTICLES] if news_urls else []
 
     if not news_texts:
-        return {
-            "summary": "No news articles found to summarize.",
-            "sources": [],
-            "sentiment": "neutral",
-            "disclaimer": "No data available."
-        }
+        return {"summary": "No news found.", "sources": [], "sentiment": "neutral", "disclaimer": "No data."}
 
-    # 2. Prepare content
-    news_content = "\n\n".join([f"Article {i+1}: {text}" for i, text in enumerate(news_texts)])
+    # 2. Construct Content
+    news_content = "\n\n".join([f"Article {i + 1}: {text}" for i, text in enumerate(news_texts)])
 
     system_prompt = (
-        f"Summarize recent news for {ticker}. "
-        "Focus on market impact. Do NOT give financial advice. "
-        "Output ONLY a valid JSON object with keys 'summary' and 'sentiment'. "
-        "Do not include markdown or backticks."
+        f"You are a financial analyst. Summarize news for {ticker}. "
+        "Return ONLY a JSON object with 'summary' and 'sentiment' keys. "
+        "Do not use markdown formatting."
     )
 
-    messages = [{"role": "user", "content": [{"text": f"Summarize these articles:\n{news_content}"}]}]
-    output_text = ""
+    messages = [{"role": "user", "content": [{"text": f"Summarize:\n{news_content}"}]}]
 
     try:
         resp = bedrock_runtime.converse(
@@ -196,32 +185,46 @@ def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: L
                 "guardrailIdentifier": GUARDRAIL_ID,
                 "guardrailVersion": GUARDRAIL_VERSION
             },
-            inferenceConfig={"maxTokens": 1000, "temperature": 0.1}
+            inferenceConfig={"maxTokens": 500, "temperature": 0.1}
         )
 
+        # 3. Handle Guardrails
         if resp.get('guardrailStatus') == 'BLOCKED':
-            return {"summary": "Content blocked by safety guardrails.", "sources": news_urls, "sentiment": "neutral", "disclaimer": "Safety filter triggered."}
+            return {"summary": "Blocked by safety filter.", "sources": news_urls, "sentiment": "neutral",
+                    "disclaimer": "Guardrail trigger."}
 
-        output_text = resp['output']['message']['content'][0]['text'].strip()
+        # 4. Safe Extraction
+        output_content = resp['output']['message']['content']
+        if not output_content:
+            return {"summary": "Model returned no text.", "sources": news_urls, "sentiment": "neutral",
+                    "disclaimer": "Empty response."}
 
-        # Robust JSON extraction using Regex
+        output_text = output_content[0]['text'].strip()
+
+        # 5. Robust JSON Parsing
         json_match = re.search(r'\{.*\}', output_text, re.DOTALL)
         if json_match:
-            parsed = json.loads(json_match.group(0))
-        else:
-            parsed = json.loads(output_text)
+            try:
+                parsed = json.loads(json_match.group(0))
+                return {
+                    "summary": parsed.get("summary", "No summary provided."),
+                    "sentiment": parsed.get("sentiment", "neutral"),
+                    "sources": news_urls,
+                    "disclaimer": "Summarized news. Not financial advice."
+                }
+            except json.JSONDecodeError:
+                pass  # Fall through to error return
 
+        # Fallback if JSON is malformed or missing
         return {
-            "summary": parsed.get("summary", "Summary unavailable."),
-            "sentiment": parsed.get("sentiment", "neutral"),
+            "summary": output_text[:500] if output_text else "Failed to parse summary.",
+            "sentiment": "neutral",
             "sources": news_urls,
-            "disclaimer": "This summarizes public news only. Not financial advice."
+            "disclaimer": "Note: Response was not in expected JSON format."
         }
 
     except Exception as e:
-        print(f"Bedrock Error: {str(e)}")
-        return {"summary": "Service error.", "sources": news_urls, "sentiment": "neutral", "disclaimer": str(e)}
-# Background job to update explore stocks
+        return {"summary": "Service error.", "sources": news_urls, "sentiment": "neutral", "disclaimer": str(e)}# Background job to update explore stocks
 
 
 def update_explore_stocks():
