@@ -2,11 +2,17 @@
 import {useEffect, useState} from 'react'
 import StockCard from './StockCard.jsx'
 import {api} from "../services/api.js";
+import ConfirmDialog from "./ConfirmDialog.jsx";
 
 export default function PinnedStocks() {
     const [pinnedStocks, setPinnedStocks] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
+    const [confirmDialog, setConfirmDialog] = useState({
+        isOpen: false,
+        stockIndex: null,
+        stock: null
+    })
 
     useEffect(() => {
         const fetchPinnedStocks = async () => {
@@ -26,8 +32,37 @@ export default function PinnedStocks() {
     }, [])
 
     const handleDelete = (index) => {
-        setPinnedStocks(pinnedStocks.filter((_, i) => i !== index))
+        const stock = pinnedStocks[index]
+        setConfirmDialog({
+            isOpen: true,
+            stockIndex: index,
+            stock: stock
+        })
     }
+
+    const confirmDelete = async () => {
+        const { stockIndex, stock } = confirmDialog
+
+        try {
+            // Remove from database
+            await api.removePinned(stock.ticker)
+
+            // Update local state
+            setPinnedStocks(pinnedStocks.filter((_, i) => i !== stockIndex))
+
+            // Close dialog
+            setConfirmDialog({ isOpen: false, stockIndex: null, stock: null })
+        } catch (err) {
+            console.error('Error removing pinned stock:', err)
+            alert('Failed to remove stock. Please try again.')
+            setConfirmDialog({ isOpen: false, stockIndex: null, stock: null })
+        }
+    }
+
+    const cancelDelete = () => {
+        setConfirmDialog({ isOpen: false, stockIndex: null, stock: null })
+    }
+
 
 
     if (loading) {
@@ -60,6 +95,7 @@ export default function PinnedStocks() {
     }
 
     return (
+        <>
         <div className="h-[calc(90vh-5rem)] w-1/2 bg-gray-50 border-r border-gray-200 rounded-2xl m-4 flex flex-col">
             {/* Header - Fixed */}
             <div className="bg-gray-50 border-b border-gray-200 rounded-t-2xl p-4">
@@ -93,5 +129,16 @@ export default function PinnedStocks() {
 
             </div>
         </div>
+    <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title="Remove Pinned Stock"
+        message={confirmDialog.stock
+            ? `Are you sure you want to remove ${confirmDialog.stock.ticker} (${confirmDialog.stock.name}) from your pinned stocks?`
+            : ''
+        }
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+    />
+    </>
     )
 }

@@ -15,6 +15,17 @@ export const api = {
         return response.json();
     },
 
+    removePinned: async (ticker) => {
+        const response = await fetch(`${API_BASE_URL}/pinned/${ticker}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        if (!response.ok) throw new Error('Failed to remove pinned stock');
+        return response.json();
+    },
+
     // Example: Get all stocks
     getAllStocks: async () => {
         const response = await fetch(`${API_BASE_URL}/explore`);
