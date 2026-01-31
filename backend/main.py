@@ -322,6 +322,7 @@ async def startup_event():
 async def github_webhook(request: Request):
     payload = await request.json()
     if payload.get("ref") == "refs/heads/main":
+        subprocess.run(['git', 'stash'], cwd="/home/ec2-user/hackathon")
         subprocess.run(["git", "pull"], cwd="/home/ec2-user/hackathon")
     return {"status": "ok"}
 
