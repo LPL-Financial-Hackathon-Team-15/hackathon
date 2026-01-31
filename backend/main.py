@@ -85,6 +85,7 @@ class MarketNewsResponse(BaseModel):
 class NewsSummaryRequest(BaseModel):
     ticker: str
     news: List[str]  # List of article texts you provide
+    urls: List[str] # List of links for articles provided
 
 class NewsSummaryResponse(BaseModel):
     summary: str
@@ -159,7 +160,7 @@ def summarize_news_with_bedrock(ticker: str, news_texts: List[str]) -> dict:
     system_prompt = f"""You find and summarize recent news about {ticker}. 
 Be factual: extract key events, sentiments, themes. 
 Do NOT give buy/sell/hold advice, price targets, or portfolio suggestions.
-Output ONLY valid JSON: {{"summary": "brief overall summary", "sources": ["source1", "source2"], "sentiment": "neutral|positive|negative"}}"""
+Output ONLY valid JSON: {{"summary": "brief overall summary", "sources": ["url1", "url2"], "sentiment": "neutral|positive|negative"}}"""
 
     messages = [{"role": "user", "content": [{"text": f"Summarize these articles:\n{news_content}"}]}]
 
@@ -540,6 +541,12 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
 
 
 @app.post("/summarize-news", response_model=dict)
+async def get_summarized_news(ticker: str, period: int = 7):
+    news = get_company_news(ticker, period)
+
+
+
+
 async def summarize_news(request: NewsSummaryRequest):
     """NEW: Summarize your provided news with Bedrock Guardrails"""
     try:
