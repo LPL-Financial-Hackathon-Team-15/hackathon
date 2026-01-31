@@ -371,6 +371,22 @@ scheduler = BackgroundScheduler()
 
 app = FastAPI()
 
+@app.on_event("startup")
+async def startup_event():
+    # Run migration first (only needed once)
+    migrate_favorites_table()  # Uncomment this line for one-time migration
+
+    init_db()
+
+    # Run initial update
+    threading.Thread(target=update_explore_stocks).start()
+
+    # Schedule updates every 10 minutes
+    scheduler.add_job(update_explore_stocks, 'interval', minutes=10)
+    scheduler.start()
+
+    print("Background scheduler started - explore stocks will update every 10 minutes")
+
 @app.on_event("shutdown")
 async def shutdown_event():
     scheduler.shutdown()
@@ -440,22 +456,6 @@ def migrate_favorites_table():
         conn.rollback()
     finally:
         conn.close()
-
-@app.on_event("startup")
-async def startup_event():
-    # Run migration first (only needed once)
-    # migrate_favorites_table()  # Uncomment this line for one-time migration
-
-    init_db()
-
-    # Run initial update
-    threading.Thread(target=update_explore_stocks).start()
-
-    # Schedule updates every 10 minutes
-    scheduler.add_job(update_explore_stocks, 'interval', minutes=10)
-    scheduler.start()
-
-    print("Background scheduler started - explore stocks will update every 10 minutes")
 
 @app.post("/webhook")
 async def github_webhook(request: Request):
