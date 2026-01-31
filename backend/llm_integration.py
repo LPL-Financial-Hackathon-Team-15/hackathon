@@ -61,7 +61,7 @@ try:
     print("⏳ Waiting 60s for propagation...")
     time.sleep(60)
 
-    version_resp = bedrock.create_guardrail_version(guardrail_identifier=guardrail_id)
+    version_resp = bedrock.create_guardrail_version(guardrailIdentifier=guardrail_id)
     version = version_resp['guardrailVersion']
     print(f"Version: {version}")
 
