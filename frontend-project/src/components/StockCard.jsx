@@ -1,8 +1,10 @@
 // components/HomeStockCard.jsx
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 export default function StockCard({ ticker, name, currentPrice, costChange, percentageChange, pinned, isLoading, hasError, onPin, onDelete }) {
     const [showPercentage, setShowPercentage] = useState(false)
+    const navigate = useNavigate()
 
     const isPositive = costChange >= 0
     const changeColor = isPositive ? 'text-green-600' : 'text-red-600'
@@ -11,8 +13,23 @@ export default function StockCard({ ticker, name, currentPrice, costChange, perc
     const formattedCostChange = `${isPositive ? '+' : ''}${costChange.toFixed(2)}`
     const formattedPercentageChange = `${isPositive ? '+' : ''}${percentageChange.toFixed(1)}%`
 
+    const handleCardClick = () => {
+        navigate(`/stock/${ticker}`, {
+            state: {
+                ticker,
+                name,
+                currentPrice,
+                costChange,
+                percentageChange
+            }
+        })
+    }
+
     return (
-        <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
+        <div
+            onClick={handleCardClick}
+            className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+        >
             {/* First row - Ticker, Price, Delete */}
             <div className="flex items-center justify-between mb-2">
                 <div className="font-semibold text-[#07407b] text-lg">{ticker}</div>

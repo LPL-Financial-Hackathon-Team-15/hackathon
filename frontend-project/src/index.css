@@ -8,6 +8,20 @@
 * {
     font-family: 'Inter', sans-serif;
 }
+
+#root {
+    background-color: #07407b;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
 /* Custom scrollbar for PinnedStocks */
 .custom-scrollbar::-webkit-scrollbar {
     width: 12px;
