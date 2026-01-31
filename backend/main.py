@@ -350,21 +350,31 @@ def get_market_news(
         "articles": articles
         }
 
-@app.get("/stock/{ticker}/{period}")
-def get_stock_history(ticker: str, period: str = "1mo"):
+@app.get("/stock/{ticker}")
+def get_stock_history(ticker: str, period: str = "1mo", interval: str = "1d"):
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(period=period)
-
+        
+        # Pass both parameters to yfinance
+        hist = stock.history(period=period, interval=interval)
+        
         if hist.empty:
             raise HTTPException(status_code=404, detail="Stock ticker not found or no data available")
-
+        
         hist.reset_index(inplace=True)
-        hist['Date'] = hist['Date'].dt.strftime('%Y-%m-%d')
+        
+        if 'Datetime' in hist.columns:
+            hist.rename(columns={'Datetime': 'Date'}, inplace=True)
+            hist['Date'] = hist['Date'].dt.strftime('%Y-%m-%d %H:%M')
+        else:
+            hist['Date'] = hist['Date'].dt.strftime('%Y-%m-%d')
+            
         data = hist.to_dict(orient="records")
-
+        
         return {
             "ticker": ticker.upper(),
+            "period": period,
+            "interval": interval,
             "history": data
         }
     except Exception as e:
@@ -511,7 +521,7 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
         cursor.execute("""
             SELECT ticker, name, currentPrice, costChange, percentageChange, last_updated
             FROM explore_stocks
-            ORDER BY ticker
+            ORDER BY currentPrice DESC
             LIMIT ? OFFSET ?
         """, (limit, offset))
 
