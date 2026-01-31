@@ -556,8 +556,8 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
 
 @app.post("/summarize-news", response_model=dict)
 async def get_summarized_news(ticker: str, period: int = 7):
-    news_data = get_company_news(ticker, period)
-    articles = news_data.get("articles", [])
+    news = get_company_news(ticker, period)
+    articles = news.get("articles", [])
     
     news_texts = []
     news_urls = []
@@ -578,6 +578,8 @@ async def summarize_news(request: NewsSummaryRequest):
     """NEW: Summarize your provided news with Bedrock Guardrails"""
     try:
         result = summarize_news_with_bedrock(request.ticker, request.news, request.urls)
+        if result is None:
+            return {"summary": "Summary unavailable.", "sources": [], "sentiment": "neutral", "disclaimer": "Error."}
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
