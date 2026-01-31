@@ -1322,6 +1322,138 @@ async def get_pinned_stocks_overview(userId: str, days: int = 7):
         raise HTTPException(status_code=500, detail=f"Overview generation failed: {str(e)}")
 
 
+async def summarize_market_with_bedrock(ticker, news_texts, news_urls=None):
+    """
+    Summarizes news articles using AWS Bedrock Claude model.
+    Returns a dict with summary, sentiment, sources, and disclaimer.
+    """
+    if not news_texts or all(not text.strip() for text in news_texts):
+        return {
+            "summary": "No news content available to summarize.",
+            "sentiment": "neutral",
+            "sources": news_urls or [],
+            "disclaimer": "Summarized news. Not financial advice."
+        }
+
+    # Ensure articles are trimmed to avoid overloading the context
+    cleaned_texts = [t[:2000] for t in news_texts[:5] if t and t.strip()]
+
+    if not cleaned_texts:
+        return {
+            "summary": "No valid news content after processing.",
+            "sentiment": "neutral",
+            "sources": news_urls or [],
+            "disclaimer": "Summarized news. Not financial advice."
+        }
+
+    news_content = "\n\n".join(cleaned_texts)
+
+    loop = asyncio.get_running_loop()
+    try:
+        # Call Bedrock with improved prompt
+        resp = await loop.run_in_executor(None, partial(bedrock_runtime.converse,
+            modelId=MODEL_ID,
+            messages=[{
+                "role": "user",
+                "content": [{
+                    "text": f"""Analyze the following news articles about {ticker} and provide a summary.
+
+News Articles:
+{news_content}
+
+Provide your response as a JSON object with exactly two keys:
+1. "overview": An in depth explanation, consisting of at least 200 words
+2. "sentiment": One of "positive", "negative", or "neutral"
+
+Return ONLY the JSON object, no other text."""
+                }]
+            }],
+            inferenceConfig={
+                "maxTokens": 600,
+                "temperature": 0.3
+            }
+        ))
+
+        # Extract the response text
+        raw_text = resp['output']['message']['content'][0]['text'].strip()
+        print(f"--- Bedrock Response for {ticker} ---")
+        print(raw_text)
+        print("--- End Response ---")
+
+        if not raw_text:
+            return {
+                "summary": "Model returned empty response.",
+                "sentiment": "neutral",
+                "sources": news_urls or [],
+                "disclaimer": "Summarized news. Not financial advice."
+            }
+
+        # Try to parse as JSON
+        # First, try to extract JSON from markdown code blocks
+        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            # Try to find JSON object directly
+            json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+            else:
+                # No JSON found, treat entire response as summary
+                return {
+                    "summary": raw_text[:500],  # Limit length
+                    "sentiment": "neutral",
+                    "sources": news_urls or [],
+                    "disclaimer": "Summarized news. Not financial advice."
+                }
+
+        # Parse the JSON
+        try:
+            data = json.loads(json_str)
+
+            # Validate required keys
+            summary = data.get("summary", "").strip()
+            sentiment = data.get("sentiment", "neutral").lower()
+
+            # Validate sentiment value
+            if sentiment not in ["positive", "negative", "neutral"]:
+                sentiment = "neutral"
+
+            if not summary:
+                summary = "No summary provided by model."
+
+            return {
+                "summary": summary,
+                "sentiment": sentiment,
+                "sources": news_urls or [],
+                "disclaimer": "Summarized news. Not financial advice."
+            }
+
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing error: {e}")
+            print(f"Attempted to parse: {json_str[:200]}")
+
+            # Fallback: use raw text as summary
+            return {
+                "summary": raw_text[:500],
+                "sentiment": "neutral",
+                "sources": news_urls or [],
+                "disclaimer": "Summarized news. Not financial advice."
+            }
+
+    except Exception as e:
+        print(f"Bedrock API Error for {ticker}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+        return {
+            "summary": f"Error generating summary: {str(e)[:100]}",
+            "sentiment": "error",
+            "sources": news_urls or [],
+            "disclaimer": "Summarized news. Not financial advice."
+        }
+
+
 @app.get("/news/market/summary")
 async def summarize_market_news(days: int = 7):
     """
@@ -1340,7 +1472,7 @@ async def summarize_market_news(days: int = 7):
         }
 
     # Limit to 5 articles
-    articles = articles[:5]
+    articles = articles[:10]
 
     # 2. Extract article summaries and URLs
     news_texts = []
@@ -1355,7 +1487,7 @@ async def summarize_market_news(days: int = 7):
             news_urls.append(getattr(article, "url", "") or "")
 
     # 3. Summarize using Bedrock
-    result = await summarize_news_with_bedrock(
+    result = await summarize_market_with_bedrock(
         ticker="Overall Market",
         news_texts=news_texts,
         news_urls=news_urls
