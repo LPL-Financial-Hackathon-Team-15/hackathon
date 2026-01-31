@@ -369,9 +369,9 @@ def get_stock_history(ticker: str, period: str = "1mo"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/pinned")
-def add_pinned(favorite: StockFavorite):
-    ticker_symbol = favorite.ticker.upper()
+@app.post("/pinned/{ticker}")
+def add_pinned(ticker: str):
+    ticker_symbol = ticker.upper()
 
     try:
         # Fetch stock info to get the name
