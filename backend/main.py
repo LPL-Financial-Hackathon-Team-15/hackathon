@@ -521,7 +521,7 @@ def get_stock_history(ticker: str, period: str = "1mo", interval: str = "1d"):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/pinned/{userId}/{ticker}")
+@app.post("/pinned/{ticker}")
 def add_pinned(ticker: str, userId: str):
     """
     Add a stock to user's favorites.
@@ -579,8 +579,7 @@ def add_pinned(ticker: str, userId: str):
             raise e
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-
-@app.get("/pinned/{userId}")
+@app.get("/pinned")
 def get_pinned(userId: str):
     """
     Get all pinned stocks for a specific user.
@@ -658,8 +657,7 @@ def get_pinned(userId: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-
-@app.delete("/pinned/{userId}/{ticker}")
+@app.delete("/pinned/{ticker}")
 def delete_pinned(ticker: str, userId: str):
     """
     Remove a stock from user's favorites.
