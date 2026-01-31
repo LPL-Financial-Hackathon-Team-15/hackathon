@@ -41,6 +41,9 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
+    # Enable WAL mode for better concurrency
+    cursor.execute("PRAGMA journal_mode=WAL;")
+
     # Create favorites table with userId
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS favorites (
@@ -111,61 +114,63 @@ class PinnedStocksOverviewResponse(BaseModel):
     disclaimer: str
 
 # --- Helper Functions ---
+
+
 # Add this as a one-time migration function (call it before init_db on first run)
-def migrate_favorites_table():
-    """
-    Migrate existing favorites table to include user_id column.
-    This is a one-time migration.
-    """
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-
-    try:
-        # Check if the old table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'")
-        if cursor.fetchone():
-            # Check if user_id column exists
-            cursor.execute("PRAGMA table_info(favorites)")
-            columns = [column[1] for column in cursor.fetchall()]
-
-            if 'user_id' not in columns:
-                print("Migrating favorites table...")
-
-                # Rename old table
-                cursor.execute("ALTER TABLE favorites RENAME TO favorites_old")
-
-                # Create new table with user_id
-                cursor.execute("""
-                               CREATE TABLE favorites
-                               (
-                                   id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                                   user_id TEXT NOT NULL,
-                                   ticker  TEXT NOT NULL,
-                                   name    TEXT NOT NULL,
-                                   UNIQUE (user_id, ticker)
-                               )
-                               """)
-
-                # Migrate data with a default user_id
-                cursor.execute("""
-                               INSERT INTO favorites (user_id, ticker, name)
-                               SELECT 'default_user', ticker, name
-                               FROM favorites_old
-                               """)
-
-                # Drop old table
-                cursor.execute("DROP TABLE favorites_old")
-
-                conn.commit()
-                print("Migration completed successfully!")
-            else:
-                print("Table already has user_id column, no migration needed.")
-
-    except Exception as e:
-        print(f"Migration error: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
+# def migrate_favorites_table():
+#     """
+#     Migrate existing favorites table to include user_id column.
+#     This is a one-time migration.
+#     """
+#     conn = sqlite3.connect(DB_FILE)
+#     cursor = conn.cursor()
+#
+#     try:
+#         # Check if the old table exists
+#         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'")
+#         if cursor.fetchone():
+#             # Check if user_id column exists
+#             cursor.execute("PRAGMA table_info(favorites)")
+#             columns = [column[1] for column in cursor.fetchall()]
+#
+#             if 'user_id' not in columns:
+#                 print("Migrating favorites table...")
+#
+#                 # Rename old table
+#                 cursor.execute("ALTER TABLE favorites RENAME TO favorites_old")
+#
+#                 # Create new table with user_id
+#                 cursor.execute("""
+#                                CREATE TABLE favorites
+#                                (
+#                                    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+#                                    user_id TEXT NOT NULL,
+#                                    ticker  TEXT NOT NULL,
+#                                    name    TEXT NOT NULL,
+#                                    UNIQUE (user_id, ticker)
+#                                )
+#                                """)
+#
+#                 # Migrate data with a default user_id
+#                 cursor.execute("""
+#                                INSERT INTO favorites (user_id, ticker, name)
+#                                SELECT 'default_user', ticker, name
+#                                FROM favorites_old
+#                                """)
+#
+#                 # Drop old table
+#                 cursor.execute("DROP TABLE favorites_old")
+#
+#                 conn.commit()
+#                 print("Migration completed successfully!")
+#             else:
+#                 print("Table already has user_id column, no migration needed.")
+#
+#     except Exception as e:
+#         print(f"Migration error: {e}")
+#         conn.rollback()
+#     finally:
+#         conn.close()
 
 async def fetch_price_data(tickers):
     """
@@ -456,7 +461,7 @@ app = FastAPI()
 @app.on_event("startup")
 async def startup_event():
     # Run migration first (only needed once)
-    migrate_favorites_table()  # Uncomment this line for one-time migration
+    # migrate_favorites_table()  # Uncomment this line for one-time migration
 
     init_db()
 
@@ -482,62 +487,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Add this as a one-time migration function (call it before init_db on first run)
-def migrate_favorites_table():
-    """
-    Migrate existing favorites table to include user_id column.
-    This is a one-time migration.
-    """
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-
-    try:
-        # Check if the old table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'")
-        if cursor.fetchone():
-            # Check if user_id column exists
-            cursor.execute("PRAGMA table_info(favorites)")
-            columns = [column[1] for column in cursor.fetchall()]
-
-            if 'user_id' not in columns:
-                print("Migrating favorites table...")
-
-                # Rename old table
-                cursor.execute("ALTER TABLE favorites RENAME TO favorites_old")
-
-                # Create new table with user_id
-                cursor.execute("""
-                               CREATE TABLE favorites
-                               (
-                                   id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                                   user_id TEXT NOT NULL,
-                                   ticker  TEXT NOT NULL,
-                                   name    TEXT NOT NULL,
-                                   UNIQUE (user_id, ticker)
-                               )
-                               """)
-
-                # Migrate data with a default user_id
-                cursor.execute("""
-                               INSERT INTO favorites (user_id, ticker, name)
-                               SELECT 'default_user', ticker, name
-                               FROM favorites_old
-                               """)
-
-                # Drop old table
-                cursor.execute("DROP TABLE favorites_old")
-
-                conn.commit()
-                print("Migration completed successfully!")
-            else:
-                print("Table already has user_id column, no migration needed.")
-
-    except Exception as e:
-        print(f"Migration error: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
 
 @app.post("/webhook")
 async def github_webhook(request: Request):
@@ -1171,8 +1120,7 @@ async def generate_pinned_stocks_overview(userId: str, days: int = 7):
         for ticker, name in rows:
             try:
                 # Get news for this ticker
-                news_response = await get_company_news(ticker, days)
-                articles = news_response.get("articles", [])
+                articles = await fetch_company_news(ticker, days)
 
                 if not articles:
                     individual_summaries.append({
@@ -1180,7 +1128,8 @@ async def generate_pinned_stocks_overview(userId: str, days: int = 7):
                         "name": name,
                         "summary": "No recent news available.",
                         "sentiment": "neutral",
-                        "article_count": 0
+                        "article_count": 0,
+                        "sources": []
                     })
                     continue
 
@@ -1220,7 +1169,8 @@ async def generate_pinned_stocks_overview(userId: str, days: int = 7):
                     "name": name,
                     "summary": f"Error retrieving news: {str(e)[:100]}",
                     "sentiment": "neutral",
-                    "article_count": 0
+                    "article_count": 0,
+                    "sources": []
                 })
 
         # 3. Generate overall portfolio overview using Bedrock
