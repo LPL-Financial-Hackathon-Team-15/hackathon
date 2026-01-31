@@ -6,7 +6,7 @@ import sys
 
 print("🔍 Testing AWS credentials...")
 try:
-    sts = boto3.client('sts', region_name='us-east-1')
+    sts = boto3.client('sts', region_name='us-east-2')
     identity = sts.get_caller_identity()
     print(f"✅ Credentials: {identity['Arn']}")
 except Exception as e:
@@ -15,7 +15,7 @@ except Exception as e:
 
 print("\n🔍 Testing Bedrock...")
 try:
-    bedrock = boto3.client('bedrock', region_name='us-east-1')
+    bedrock = boto3.client('bedrock', region_name='us-east-2')
     print("✅ Bedrock client OK")
 except Exception as e:
     print(f"❌ Bedrock client FAILED: {e}")
@@ -24,7 +24,7 @@ except Exception as e:
 print("\n🚀 Creating Guardrail...")
 try:
     response = bedrock.create_guardrail(
-        name='stock-news-no-advice-hackathon',
+        name='stock-news-no-advice-hackathon-1',
         description='Blocks financial advice for LPL AWS hackathon',
 
         topicPolicyConfig={
