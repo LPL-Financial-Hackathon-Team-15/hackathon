@@ -154,84 +154,50 @@ def fetch_price_data(tickers):
 
 # NEW: Bedrock summarizer with guardrails
 def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: List[str] = None) -> dict:
-    """
-    Summarizes provided news using Bedrock + Guardrails.
-    Returns JSON or error.
-    """
-    if not news_texts:
-        return {
-            "summary": "No news articles found to summarize.",
-            "sources": [],
-            "sentiment": "neutral",
-            "disclaimer": "No data available."
-        }
+    # ... (Keep your initial checks and news_content assembly)
 
-    if news_urls and len(news_urls) == len(news_texts):
-        news_content = "\n\n".join([f"Article {i + 1}:\nSource: {news_urls[i]}\nContent: {text}" for i, text in enumerate(news_texts)])
-    else:
-        news_content = "\n\n".join([f"Article {i + 1}: {text}" for i, text in enumerate(news_texts)])
+    # 1. Stricter System Prompt
+    system_prompt = f"""You are a financial news aggregator for {ticker}.
+Summarize recent news focusing on key events and themes.
+Strict Requirements:
+- Do NOT provide financial advice.
+- Output MUST be a single JSON object.
+- DO NOT include any introductory text, markdown formatting like ```json, or concluding remarks.
+- Format: {{"summary": "...", "sentiment": "neutral|positive|negative"}}"""
 
-    system_prompt = f"""You find and summarize recent news about {ticker}. 
-Be factual: extract key events, sentiments, themes. 
-Do NOT give buy/sell/hold advice, price targets, or portfolio suggestions.
-Output ONLY valid JSON: {{"summary": "brief overall summary", "sentiment": "neutral|positive|negative"}}"""
+    # ... (Keep the bedrock_runtime.converse call)
 
-    messages = [{"role": "user", "content": [{"text": f"Summarize these articles:\n{news_content}"}]}]
-
-    output_text = "" # Define here for logging in case of error
     try:
-        resp = bedrock_runtime.converse(
-            modelId=MODEL_ID,
-            messages=messages,
-            system=[{"text": system_prompt}],
-            guardrailConfig={
-                "guardrailIdentifier": GUARDRAIL_ID,
-                "guardrailVersion": GUARDRAIL_VERSION
-            },
-            inferenceConfig={"maxTokens": 1000, "temperature": 0.1}
-        )
+        # 2. Extract content safely
+        output_text = resp['output']['message']['content'][0]['text'].strip()
 
-        if resp.get('guardrailStatus') == 'BLOCKED':
-            return {
-                "summary": "Content filtered for safety - no advice allowed.",
-                "sources": [],
-                "sentiment": "neutral",
-                "disclaimer": "Informational only; not financial advice."
-            }
+        # 3. Enhanced JSON Extraction
+        # Look for the first '{' and last '}' to strip away any conversational fluff
+        import re
+        json_match = re.search(r'\{.*\}', output_text, re.DOTALL)
 
-        output_text = resp['output']['message']['content'][0]['text']
-
-        # The model can sometimes return the JSON inside a markdown block or with extra text.
-        # This logic extracts the JSON robustly.
-        json_str = output_text
-        if '```json' in output_text:
-            try:
-                json_str = output_text.split('```json\n')[1].split('\n```')
-            except IndexError:
-                pass # Fallback to finding curly braces
-        
-        if '{' in json_str:
-            start = json_str.find('{')
-            end = json_str.rfind('}') + 1
-            if start != -1 and end != 0:
-                json_str = json_str[start:end]
+        if json_match:
+            json_str = json_match.group(0)
+        else:
+            json_str = output_text
 
         parsed = json.loads(json_str)
 
         return {
-            **parsed,
+            "summary": parsed.get("summary", "No summary provided."),
+            "sentiment": parsed.get("sentiment", "neutral"),
             "sources": news_urls if news_urls else [],
             "disclaimer": "This summarizes public news only. Not financial advice."
         }
 
-    except json.JSONDecodeError:
-        print(f"Bedrock JSON decode failed. Raw output was: {output_text}")
-        return {"summary": "Summary generation failed.", "sources": [], "sentiment": "neutral",
-                "disclaimer": "Error occurred."}
-    except Exception as e:
-        print(f"Bedrock error: {e}")
-        return {"summary": f"Service error: {str(e)}", "sources": [], "sentiment": "neutral",
-                "disclaimer": "Try again."}
+    except (json.JSONDecodeError, KeyError, IndexError) as e:
+        print(f"Extraction failed. Raw output: {output_text}")  # Check logs for this!
+        return {
+            "summary": "Failed to parse summary response.",
+            "sources": [],
+            "sentiment": "neutral",
+            "disclaimer": "The model response was not in the expected format."
+        }
 
 
 # Background job to update explore stocks
