@@ -371,19 +371,6 @@ scheduler = BackgroundScheduler()
 
 app = FastAPI()
 
-@app.on_event("startup")
-async def startup_event():
-    init_db()
-
-    # Run initial update
-    threading.Thread(target=update_explore_stocks).start()
-
-    # Schedule updates every 10 minutes
-    scheduler.add_job(update_explore_stocks, 'interval', minutes=10)
-    scheduler.start()
-
-    print("Background scheduler started - explore stocks will update every 10 minutes")
-
 @app.on_event("shutdown")
 async def shutdown_event():
     scheduler.shutdown()
