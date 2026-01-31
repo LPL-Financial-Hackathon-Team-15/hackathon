@@ -10,7 +10,7 @@ from typing import List
 from services.finnhub_service import fetch_company_news, fetch_market_news
 import os
 import get_1000
-from backend.get_1000 import get_tickers_from_wikipedia
+from get_1000 import get_tickers_from_wikipedia
 
 # --- Database Setup ---
 DB_FILE = "favorites.db"
@@ -127,11 +127,6 @@ async def github_webhook(request: Request):
         subprocess.run(["git", "pull"], cwd="/home/ec2-user/hackathon")
     return {"status": "ok"}
 
-@app.get("/stock/{ticker}/{period}")
-def get_stock_history(ticker: str, period: str):
-@app.get("/")
-def read_root():
-    return {"message": "Server running right now"}
 
 @app.get("/news/company/{ticker}", response_model=CompanyNewsResponse)
 def get_company_news(
@@ -157,8 +152,8 @@ def get_market_news(
         "articles": articles
         }
 
-@app.get("/stock/{ticker}")
-def get_stock_history(ticker: str):
+@app.get("/stock/{ticker}/{period}")
+def get_stock_history(ticker: str, period: str = "1mo"):
     try:
         stock = yf.Ticker(ticker)
         hist = stock.history(period=period)
