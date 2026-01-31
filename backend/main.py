@@ -159,10 +159,13 @@ import json
 
 def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: List[str] = None) -> dict:
     """
-    Summarizes provided news using Bedrock + Guardrails.
-    Returns a dictionary with summary, sentiment, and sources.
+    Handles the heavy lifting of talking to AWS Bedrock.
     """
-    # 1. Handle empty input
+    # 1. Limit input size to prevent 'Invalid Format' errors from model truncation
+    MAX_ARTICLES = 10
+    news_texts = news_texts[:MAX_ARTICLES]
+    news_urls = news_urls[:MAX_ARTICLES] if news_urls else []
+
     if not news_texts:
         return {
             "summary": "No news articles found to summarize.",
@@ -171,34 +174,20 @@ def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: L
             "disclaimer": "No data available."
         }
 
-    # 2. Prepare the content string
-    if news_urls and len(news_urls) == len(news_texts):
-        news_content = "\n\n".join([
-            f"Article {i + 1}:\nSource: {news_urls[i]}\nContent: {text}"
-            for i, text in enumerate(news_texts)
-        ])
-    else:
-        news_content = "\n\n".join([f"Article {i + 1}: {text}" for i, text in enumerate(news_texts)])
+    # 2. Prepare content
+    news_content = "\n\n".join([f"Article {i+1}: {text}" for i, text in enumerate(news_texts)])
 
-    # 3. Define a strict System Prompt
     system_prompt = (
-        f"You are a financial news assistant analyzing {ticker}. "
-        "Summarize the provided articles into a concise overview. "
-        "Do NOT provide financial advice, price targets, or 'buy/sell' recommendations. "
-        "Your output MUST be a single JSON object with the keys 'summary' and 'sentiment'. "
-        "Do not include markdown formatting or any text outside the JSON object."
+        f"Summarize recent news for {ticker}. "
+        "Focus on market impact. Do NOT give financial advice. "
+        "Output ONLY a valid JSON object with keys 'summary' and 'sentiment'. "
+        "Do not include markdown or backticks."
     )
 
-    messages = [{
-        "role": "user",
-        "content": [{"text": f"Summarize these articles:\n{news_content}"}]
-    }]
-
-    # Initialize output_text so it exists even if the API call fails
+    messages = [{"role": "user", "content": [{"text": f"Summarize these articles:\n{news_content}"}]}]
     output_text = ""
 
     try:
-        # 4. AWS Bedrock Call
         resp = bedrock_runtime.converse(
             modelId=MODEL_ID,
             messages=messages,
@@ -210,53 +199,31 @@ def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: L
             inferenceConfig={"maxTokens": 1000, "temperature": 0.1}
         )
 
-        # Check for Guardrail intervention
         if resp.get('guardrailStatus') == 'BLOCKED':
-            return {
-                "summary": "The summary was blocked by safety filters (likely due to detected financial advice).",
-                "sources": news_urls if news_urls else [],
-                "sentiment": "neutral",
-                "disclaimer": "Content filtered for safety."
-            }
+            return {"summary": "Content blocked by safety guardrails.", "sources": news_urls, "sentiment": "neutral", "disclaimer": "Safety filter triggered."}
 
-        # 5. Extract and Parse JSON
         output_text = resp['output']['message']['content'][0]['text'].strip()
 
-        # Use Regex to find the JSON block in case the model added conversational filler
+        # Robust JSON extraction using Regex
         json_match = re.search(r'\{.*\}', output_text, re.DOTALL)
         if json_match:
-            json_str = json_match.group(0)
-            parsed = json.loads(json_str)
+            parsed = json.loads(json_match.group(0))
         else:
-            # Fallback if no braces found
             parsed = json.loads(output_text)
 
         return {
             "summary": parsed.get("summary", "Summary unavailable."),
             "sentiment": parsed.get("sentiment", "neutral"),
-            "sources": news_urls if news_urls else [],
+            "sources": news_urls,
             "disclaimer": "This summarizes public news only. Not financial advice."
         }
 
-    except json.JSONDecodeError:
-        print(f"JSON Decode Error. Raw output was: {output_text}")
-        return {
-            "summary": "The AI returned an invalid format.",
-            "sources": news_urls if news_urls else [],
-            "sentiment": "neutral",
-            "disclaimer": "Error parsing model response."
-        }
     except Exception as e:
-        # This catches Boto3 errors, Networking issues, or Guardrail config errors
-        print(f"Bedrock Service Error: {str(e)}")
-        return {
-            "summary": "The summarization service is currently unavailable.",
-            "sources": [],
-            "sentiment": "neutral",
-            "disclaimer": f"Error: {str(e)}"
-        }
-
+        print(f"Bedrock Error: {str(e)}")
+        return {"summary": "Service error.", "sources": news_urls, "sentiment": "neutral", "disclaimer": str(e)}
 # Background job to update explore stocks
+
+
 def update_explore_stocks():
     """
     Background job that runs periodically to update explore stocks data.
@@ -648,63 +615,13 @@ import json
 import re
 
 
-def summarize_news(news_text, ticker="the company", model_id="anthropic.claude-3-sonnet-20240229-v1:0"):
+async def summarize_news(request: NewsSummaryRequest):
     """
-    Summarizes financial news using Claude on Bedrock with a focus on market impact.
+    Changed to 'async def' so it can be awaited by the endpoint.
     """
-    # 1. Initialize Bedrock Client
-    bedrock = boto3.client(service_name='bedrock-runtime', region_name='us-east-1')
-
-    # 2. Construct the Prompt (Optimized for Claude)
-    # Note: We use XML-like tags to help Claude distinguish between instructions and data.
-    prompt = f"""
-    Human: You are a senior financial analyst. Summarize the following news article for ${ticker}.
-
-    Provide the output in the following JSON format:
-    {{
-        "headline": "One sentence punchy summary",
-        "key_points": ["point 1", "point 2"],
-        "sentiment": "Bullish/Bearish/Neutral",
-        "market_impact": "High/Medium/Low"
-    }}
-
-    Article Text:
-    <article>
-    {news_text}
-    </article>
-
-    Assistant: {{"""
-
-    # 3. Configure Payload
-    body = json.dumps({
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 1000,
-        "messages": [
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": prompt}]
-            }
-        ],
-        "temperature": 0.1  # Low temperature for factual consistency
-    })
-
     try:
-        # 4. Invoke Model
-        response = bedrock.invoke_model(body=body, modelId=model_id)
-        response_body = json.loads(response.get('body').read())
-
-        # Extract the text content
-        raw_completion = response_body['content'][0]['text']
-
-        # 5. Clean and Parse JSON
-        # Since we pre-filled the prompt with '{', we add it back to the completion
-        full_json_str = "{" + raw_completion
-
-        # Use Regex to find the JSON block if Claude added extra text
-        match = re.search(r'(\{.*\}|\[.*\])', full_json_str, re.DOTALL)
-        if match:
-            return json.loads(match.group(1))
-        return {"error": "Could not parse JSON", "raw": raw_completion}
-
+        # Since summarize_news_with_bedrock is a blocking I/O call (boto3),
+        # we just call it normally here.
+        return summarize_news_with_bedrock(request.ticker, request.news, request.urls)
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
