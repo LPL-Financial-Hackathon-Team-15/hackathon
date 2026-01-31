@@ -27,9 +27,8 @@ try:
         name='stock-news-no-advice-hackathon',
         description='Blocks financial advice for LPL AWS hackathon',
 
-        # FIXED: camelCase parameter names
         topicPolicyConfig={
-            'topicsConfig': [  # camelCase
+            'topicsConfig': [
                 {
                     'name': 'Investment Advice',
                     'definition': 'Personalized financial advice or stock recommendations.',
@@ -42,14 +41,15 @@ try:
                 }
             ]
         },
+
+        # FIXED: Updated to camelCase keys
         contentPolicyConfig={
-            'filtersConfig': [  # camelCase
-                {'type': 'HATE', 'input_strength': 'HIGH', 'output_strength': 'HIGH'},
-                {'type': 'VIOLENCE', 'input_strength': 'HIGH', 'output_strength': 'HIGH'}
+            'filtersConfig': [
+                {'type': 'HATE', 'inputStrength': 'HIGH', 'outputStrength': 'HIGH'},
+                {'type': 'VIOLENCE', 'inputStrength': 'HIGH', 'outputStrength': 'HIGH'}
             ]
         },
 
-        # FIXED: camelCase
         blockedInputMessaging='Cannot provide investment advice. Ask about news summaries.',
         blockedOutputsMessaging='Response filtered: no financial advice allowed.'
     )
@@ -58,7 +58,7 @@ try:
     print(f"\n✅ SUCCESS!")
     print(f"Guardrail ID: {guardrail_id}")
 
-    print("⏳ Waiting 60s...")
+    print("⏳ Waiting 60s for propagation...")
     time.sleep(60)
 
     version_resp = bedrock.create_guardrail_version(guardrail_identifier=guardrail_id)
