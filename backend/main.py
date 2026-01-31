@@ -109,7 +109,7 @@ class PinnedStocksOverviewResponse(BaseModel):
     disclaimer: str
 
 # --- Helper Functions ---
-def fetch_price_data(tickers):
+async def fetch_price_data(tickers):
     """
     Fetches current price and previous close for a list of tickers using yfinance bulk download.
     Returns a dictionary: {ticker: (current_price, previous_close)}
@@ -495,7 +495,7 @@ async def get_company_news(
     ticker: str,
     days: int = 7
 ):
-    articles = fetch_company_news(ticker, days)
+    articles = await fetch_company_news(ticker, days)
     return {
         "ticker": ticker.upper(),
         "article_count": len(articles),
@@ -503,11 +503,11 @@ async def get_company_news(
     }
 
 @app.get("/news/category/{category}", response_model=MarketNewsResponse)
-def get_market_news(
+async def get_market_news(
     category:str="general",
     days: int=7
 ):
-    articles = fetch_market_news(category, days)
+    articles = await fetch_market_news(category, days)
     return {
         "category": category,
         "article_count": len(articles),
@@ -1309,7 +1309,7 @@ async def summarize_market_news(days: int = 7):
     """
 
     # 1. Fetch general market news
-    articles = fetch_market_news(category="general", days=days)
+    articles = await fetch_market_news(category="general", days=days)
 
     if not articles:
         return {

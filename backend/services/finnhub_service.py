@@ -6,7 +6,7 @@ from services.config import FINNHUB_API_KEY
 FINNHUB_COMPANY_NEWS_URL = "https://finnhub.io/api/v1/company-news"
 FINNHUB_MARKET_NEWS_URL = "https://finnhub.io/api/v1/news"
 
-def fetch_company_news(
+async def fetch_company_news(
     ticker: str,
     days: int = 7
 ) -> List[Dict]:
@@ -45,7 +45,7 @@ def fetch_company_news(
 
     return articles
 
-def fetch_market_news(
+async def fetch_market_news(
     category: str,
     days: int = 7
 ) -> List[Dict]:
