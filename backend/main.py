@@ -295,69 +295,14 @@ def delete_pinned(ticker: str):
             raise e
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-def get_top_tickers():
-    # A hardcoded list of ~50 popular North American stocks
-    return [
-        {"ticker": "AAPL", "name": "Apple Inc."},
-        {"ticker": "MSFT", "name": "Microsoft Corporation"},
-        {"ticker": "GOOGL", "name": "Alphabet Inc."},
-        {"ticker": "AMZN", "name": "Amazon.com, Inc."},
-        {"ticker": "TSLA", "name": "Tesla, Inc."},
-        {"ticker": "NVDA", "name": "NVIDIA Corporation"},
-        {"ticker": "META", "name": "Meta Platforms, Inc."},
-        {"ticker": "NFLX", "name": "Netflix, Inc."},
-        {"ticker": "AMD", "name": "Advanced Micro Devices, Inc."},
-        {"ticker": "INTC", "name": "Intel Corporation"},
-        {"ticker": "SPY", "name": "SPDR S&P 500 ETF Trust"},
-        {"ticker": "QQQ", "name": "Invesco QQQ Trust"},
-        {"ticker": "JPM", "name": "JPMorgan Chase & Co."},
-        {"ticker": "BAC", "name": "Bank of America Corporation"},
-        {"ticker": "WFC", "name": "Wells Fargo & Company"},
-        {"ticker": "C", "name": "Citigroup Inc."},
-        {"ticker": "GS", "name": "The Goldman Sachs Group, Inc."},
-        {"ticker": "MS", "name": "Morgan Stanley"},
-        {"ticker": "V", "name": "Visa Inc."},
-        {"ticker": "MA", "name": "Mastercard Incorporated"},
-        {"ticker": "JNJ", "name": "Johnson & Johnson"},
-        {"ticker": "PFE", "name": "Pfizer Inc."},
-        {"ticker": "MRK", "name": "Merck & Co., Inc."},
-        {"ticker": "ABBV", "name": "AbbVie Inc."},
-        {"ticker": "LLY", "name": "Eli Lilly and Company"},
-        {"ticker": "UNH", "name": "UnitedHealth Group Incorporated"},
-        {"ticker": "CVS", "name": "CVS Health Corporation"},
-        {"ticker": "WMT", "name": "Walmart Inc."},
-        {"ticker": "TGT", "name": "Target Corporation"},
-        {"ticker": "COST", "name": "Costco Wholesale Corporation"},
-        {"ticker": "HD", "name": "The Home Depot, Inc."},
-        {"ticker": "LOW", "name": "Lowe's Companies, Inc."},
-        {"ticker": "MCD", "name": "McDonald's Corporation"},
-        {"ticker": "SBUX", "name": "Starbucks Corporation"},
-        {"ticker": "NKE", "name": "NIKE, Inc."},
-        {"ticker": "DIS", "name": "The Walt Disney Company"},
-        {"ticker": "CMCSA", "name": "Comcast Corporation"},
-        {"ticker": "VZ", "name": "Verizon Communications Inc."},
-        {"ticker": "T", "name": "AT&T Inc."},
-        {"ticker": "TMUS", "name": "T-Mobile US, Inc."},
-        {"ticker": "XOM", "name": "Exxon Mobil Corporation"},
-        {"ticker": "CVX", "name": "Chevron Corporation"},
-        {"ticker": "COP", "name": "ConocoPhillips"},
-        {"ticker": "SLB", "name": "Schlumberger Limited"},
-        {"ticker": "EOG", "name": "EOG Resources, Inc."},
-        {"ticker": "BA", "name": "The Boeing Company"},
-        {"ticker": "LMT", "name": "Lockheed Martin Corporation"},
-        {"ticker": "RTX", "name": "Raytheon Technologies Corporation"},
-        {"ticker": "GE", "name": "General Electric Company"},
-        {"ticker": "MMM", "name": "3M Company"}
-    ]
-
 @app.get("/explore")
 def get_explore_stocks():
     file_path = os.path.join(os.path.dirname(__file__), 'top-1000.txt')
     stock_list = []
 
     # Only call get_top_1000 if the file doesn't exist
-    if not os.path.exists(file_path):
-        get_1000.get_top_1000()
+    # if not os.path.exists(file_path):
+    #     get_1000.get_top_1000()
 
     if os.path.exists(file_path):
         try:
@@ -380,16 +325,10 @@ def get_explore_stocks():
             print(f"Error reading top-1000.txt: {e}")
             stock_list = []
 
-    if not stock_list:
-        # Fallback to hardcoded list if file read fails or is empty
-        # But per requirements, we should ideally stick to the file.
-        # If the file is empty/missing, this fallback is a safety net.
-        stock_list = get_top_tickers()
-
-    # OPTIMIZATION: Randomly select 50 stocks to display instead of all 1000
-    # This prevents the "loads forever" issue by reducing the yfinance payload.
-    if len(stock_list) > 100:
-        stock_list = random.sample(stock_list, 100)
+    # Limit to 200 stocks to avoid heavy yfinance calls
+    MAX_STOCKS = 200
+    if len(stock_list) > MAX_STOCKS:
+        stock_list = random.sample(stock_list, MAX_STOCKS)
 
     tickers = [item["ticker"] for item in stock_list]
     results = []
