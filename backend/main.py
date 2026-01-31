@@ -11,14 +11,27 @@ from services.finnhub_service import fetch_company_news, fetch_market_news
 import os
 import get_1000
 from get_1000 import get_tickers_from_wikipedia
+# Add these imports at the top
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime
+import threading
+
 
 # --- Database Setup ---
 DB_FILE = "favorites.db"
 
+# Add caching at the top
+EXPLORE_CACHE = {
+    "data": [],
+    "timestamp": None,
+    "ttl": 300  # 5 minutes cache
+}
+# Modify your init_db function to include the explore_stocks table
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    # Create table if it doesn't exist
+
+    # Create favorites table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS favorites (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,6 +39,19 @@ def init_db():
             name TEXT NOT NULL
         )
     """)
+
+    # Create explore_stocks table for cached data
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS explore_stocks (
+            ticker TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            currentPrice REAL,
+            costChange REAL,
+            percentageChange REAL,
+            last_updated TIMESTAMP
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -104,6 +130,110 @@ def fetch_price_data(tickers):
                     results[ticker] = res
 
     return results
+
+
+
+# Background job to update explore stocks
+def update_explore_stocks():
+    """
+    Background job that runs periodically to update explore stocks data.
+    """
+    print(f"[{datetime.now()}] Starting explore stocks update...")
+
+    file_path = os.path.join(os.path.dirname(__file__), 'top-1000.txt')
+    stock_list = []
+
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    if '|' in line:
+                        parts = line.split('|')
+                        ticker = parts[0].strip()
+                        name = parts[1].strip()
+                    else:
+                        ticker = line.strip()
+                        name = ticker
+
+                    stock_list.append({"ticker": ticker, "name": name})
+        except Exception as e:
+            print(f"Error reading top-1000.txt: {e}")
+            return
+
+    # Process in batches to avoid overwhelming yfinance
+    MAX_STOCKS = 200
+    if len(stock_list) > MAX_STOCKS:
+        stock_list = random.sample(stock_list, MAX_STOCKS)
+
+    tickers = [item["ticker"] for item in stock_list]
+
+    try:
+        # Bulk fetch price data
+        price_data = fetch_price_data(tickers)
+
+        # Update database
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+
+        current_time = datetime.now()
+
+        for item in stock_list:
+            ticker_symbol = item["ticker"]
+            stock_name = item["name"]
+
+            if ticker_symbol in price_data:
+                current_price, previous_close = price_data[ticker_symbol]
+
+                if current_price is not None and previous_close is not None:
+                    day_change_usd = current_price - previous_close
+                    day_change_percent = (day_change_usd / previous_close) * 100
+
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO explore_stocks
+                        (ticker, name, currentPrice, costChange, percentageChange, last_updated)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        ticker_symbol,
+                        stock_name,
+                        round(current_price, 2),
+                        round(day_change_usd, 2),
+                        round(day_change_percent, 2),
+                        current_time
+                    ))
+
+        conn.commit()
+        conn.close()
+
+        print(f"[{datetime.now()}] Explore stocks update completed. Updated {len(price_data)} stocks.")
+
+    except Exception as e:
+        print(f"Error updating explore stocks: {e}")
+
+# Initialize scheduler
+scheduler = BackgroundScheduler()
+
+@app.on_event("startup")
+async def startup_event():
+    init_db()
+
+    # Run initial update
+    threading.Thread(target=update_explore_stocks).start()
+
+    # Schedule updates every 10 minutes
+    scheduler.add_job(update_explore_stocks, 'interval', minutes=10)
+    scheduler.start()
+
+    print("Background scheduler started - explore stocks will update every 10 minutes")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    scheduler.shutdown()
+    print("Background scheduler stopped")
+
 
 # --- FastAPI App ---
 app = FastAPI()
@@ -296,85 +426,47 @@ def delete_pinned(ticker: str):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 @app.get("/explore")
-def get_explore_stocks():
-    file_path = os.path.join(os.path.dirname(__file__), 'top-1000.txt')
-    stock_list = []
-
-    # Only call get_top_1000 if the file doesn't exist
-    # if not os.path.exists(file_path):
-    #     get_1000.get_top_1000()
-
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-
-                    if '|' in line:
-                        parts = line.split('|')
-                        ticker = parts[0].strip()
-                        name = parts[1].strip()
-                    else:
-                        ticker = line.strip()
-                        name = ticker # Fallback if name not present
-
-                    stock_list.append({"ticker": ticker, "name": name})
-        except Exception as e:
-            print(f"Error reading top-1000.txt: {e}")
-            stock_list = []
-
-    # Limit to 200 stocks to avoid heavy yfinance calls
-    MAX_STOCKS = 200
-    if len(stock_list) > MAX_STOCKS:
-        stock_list = random.sample(stock_list, MAX_STOCKS)
-
-    tickers = [item["ticker"] for item in stock_list]
-    results = []
-
+def get_explore_stocks(limit: int = 100, offset: int = 0):
+    """
+    Get explore stocks from cached database.
+    Much faster than fetching from yfinance every time.
+    """
     try:
-        # Bulk fetch price data
-        price_data = fetch_price_data(tickers)
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
 
-        for item in stock_list:
-            ticker_symbol = item["ticker"]
-            stock_name = item["name"]
+        # Get total count
+        cursor.execute("SELECT COUNT(*) FROM explore_stocks")
+        total_count = cursor.fetchone()[0]
 
-            if ticker_symbol in price_data:
-                current_price, previous_close = price_data[ticker_symbol]
+        # Get paginated results
+        cursor.execute("""
+            SELECT ticker, name, currentPrice, costChange, percentageChange, last_updated
+            FROM explore_stocks
+            ORDER BY ticker
+            LIMIT ? OFFSET ?
+        """, (limit, offset))
 
-                if current_price is not None and previous_close is not None:
-                    day_change_usd = current_price - previous_close
-                    day_change_percent = (day_change_usd / previous_close) * 100
+        rows = cursor.fetchall()
+        conn.close()
 
-                    results.append({
-                        "ticker": ticker_symbol,
-                        "name": stock_name,
-                        "currentPrice": round(current_price, 2),
-                        "costChange": round(day_change_usd, 2),
-                        "percentageChange": round(day_change_percent, 2)
-                    })
-                else:
-                     results.append({
-                        "ticker": ticker_symbol,
-                        "name": stock_name,
-                        "currentPrice": round(current_price, 2) if current_price else None,
-                        "costChange": None,
-                        "percentageChange": None,
-                        "error": "Insufficient price data"
-                    })
-            else:
-                results.append({
-                    "ticker": ticker_symbol,
-                    "name": stock_name,
-                    "currentPrice": None,
-                    "costChange": None,
-                    "percentageChange": None,
-                    "error": "Price data unavailable"
-                })
+        results = []
+        for row in rows:
+            results.append({
+                "ticker": row[0],
+                "name": row[1],
+                "currentPrice": row[2],
+                "costChange": row[3],
+                "percentageChange": row[4],
+                "last_updated": row[5]
+            })
+
+        return {
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+            "stocks": results
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
-
-    return results
