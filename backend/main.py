@@ -18,7 +18,7 @@ import threading
 # Bedrock setup - Replace with your actual values after creating guardrail
 BEDROCK_REGION = 'us-east-2'  # Or your Bedrock region
 MODEL_ID = 'anthropic.claude-3-5-sonnet-20240620-v1:0'  # Claude Sonnet (good for summarization)
-GUARDRAIL_ID = '4czhqfll85cj'  # From create_guardrail response
+GUARDRAIL_ID = 'f1mk0d93g9xs'  # From create_guardrail response
 GUARDRAIL_VERSION = 'DRAFT'  # Or specific version e.g. 'USD5Z3EXAMPLE'
 
 bedrock_runtime = boto3.client('bedrock-runtime', region_name=BEDROCK_REGION)
@@ -156,10 +156,10 @@ def summarize_news_with_bedrock(ticker: str, news_texts: List[str]) -> dict:
     """
     news_content = "\n\n".join([f"Article {i + 1}: {text}" for i, text in enumerate(news_texts)])
 
-    system_prompt = f"""You summarize recent news about {ticker}. 
+    system_prompt = f"""You find and summarize recent news about {ticker}. 
 Be factual: extract key events, sentiments, themes. 
 Do NOT give buy/sell/hold advice, price targets, or portfolio suggestions.
-Output ONLY valid JSON: {{"summary": "brief overall summary", "key_themes": ["theme1", "theme2"], "sentiment": "neutral|positive|negative"}}"""
+Output ONLY valid JSON: {{"summary": "brief overall summary", "sources": ["source1", "source2"], "sentiment": "neutral|positive|negative"}}"""
 
     messages = [{"role": "user", "content": [{"text": f"Summarize these articles:\n{news_content}"}]}]
 
