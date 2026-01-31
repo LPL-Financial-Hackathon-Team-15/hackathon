@@ -19,6 +19,8 @@ export default function Panel({ title, isExpanded, isCollapsed, onExpand, onColl
             {/* Header with expand/collapse button */}
             <div className="flex items-center justify-between p-4 flex-shrink-0 border-b border-gray-200">
                 <h2 className="text-xl font-bold text-[#07407b]">{title}</h2>
+                {
+                    onExpand && onCollapse && (
                 <button
                     onClick={handleClick}
                     className="text-gray-400 hover:text-[#07407b] transition-colors"
@@ -33,7 +35,8 @@ export default function Panel({ title, isExpanded, isCollapsed, onExpand, onColl
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                         </svg>
                     )}
-                </button>
+                </button>)
+                }
             </div>
 
             {/* Content area - hidden when collapsed */}
