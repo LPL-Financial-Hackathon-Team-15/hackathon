@@ -1,4 +1,4 @@
-import requests
+import httpx
 from datetime import datetime, timedelta
 from typing import List, Dict
 from services.config import FINNHUB_API_KEY
@@ -20,10 +20,10 @@ async def fetch_company_news(
         "token": FINNHUB_API_KEY
     }
 
-    response = requests.get(FINNHUB_COMPANY_NEWS_URL, params=params, timeout=10)
-    response.raise_for_status()
-
-    raw_articles = response.json()
+    async with httpx.AsyncClient() as client:
+        response = await client.get(FINNHUB_COMPANY_NEWS_URL, params=params, timeout=10)
+        response.raise_for_status()
+        raw_articles = response.json()
 
     articles = []
 
@@ -59,10 +59,10 @@ async def fetch_market_news(
         "token": FINNHUB_API_KEY
     }
 
-    response = requests.get(FINNHUB_MARKET_NEWS_URL, params=params, timeout=10)
-    response.raise_for_status()
-
-    raw_articles = response.json()
+    async with httpx.AsyncClient() as client:
+        response = await client.get(FINNHUB_MARKET_NEWS_URL, params=params, timeout=10)
+        response.raise_for_status()
+        raw_articles = response.json()
 
     articles = []
 

@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import asyncio
+from functools import partial
 import subprocess
 import boto3
 import re
@@ -120,11 +122,13 @@ async def fetch_price_data(tickers):
     if isinstance(tickers, str):
         tickers = [tickers]
 
+    loop = asyncio.get_running_loop()
     try:
         # Download data for all tickers at once
         # period="5d" ensures we have enough history for previous close even after weekends
         # group_by='ticker' organizes columns by ticker
-        data = yf.download(tickers, period="5d", interval="1d", group_by='ticker', progress=False, threads=True)
+        # Run blocking yf.download in executor
+        data = await loop.run_in_executor(None, partial(yf.download, tickers, period="5d", interval="1d", group_by='ticker', progress=False, threads=True))
     except Exception as e:
         print(f"Error downloading data: {e}")
         return {}
@@ -203,9 +207,10 @@ async def summarize_news_with_bedrock(ticker, news_texts, news_urls=None):
 
     news_content = "\n\n".join(cleaned_texts)
 
+    loop = asyncio.get_running_loop()
     try:
         # Call Bedrock with improved prompt
-        resp = bedrock_runtime.converse(
+        resp = await loop.run_in_executor(None, partial(bedrock_runtime.converse,
             modelId=MODEL_ID,
             messages=[{
                 "role": "user",
@@ -226,7 +231,7 @@ Return ONLY the JSON object, no other text."""
                 "maxTokens": 600,
                 "temperature": 0.3
             }
-        )
+        ))
 
         # Extract the response text
         raw_text = resp['output']['message']['content'][0]['text'].strip()
@@ -346,7 +351,8 @@ def update_explore_stocks():
 
     try:
         # Bulk fetch price data
-        price_data = fetch_price_data(tickers)
+        # Use asyncio.run to execute the async function from this synchronous thread
+        price_data = asyncio.run(fetch_price_data(tickers))
 
         # Update database
         conn = sqlite3.connect(DB_FILE)
@@ -620,15 +626,20 @@ async def get_pinned(userId: str):
     user_id = userId.strip()
 
     try:
+        loop = asyncio.get_running_loop()
         # Get favorited tickers from the database for this user
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT ticker, name FROM favorites WHERE user_id = ?",
-            (user_id,)
-        )
-        rows = cursor.fetchall()
-        conn.close()
+        def get_db_favorites():
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT ticker, name FROM favorites WHERE user_id = ?",
+                (user_id,)
+            )
+            rows = cursor.fetchall()
+            conn.close()
+            return rows
+
+        rows = await loop.run_in_executor(None, get_db_favorites)
 
         if not rows:
             return []
@@ -842,9 +853,13 @@ async def analyze_stock_performance(ticker, period="1y"):
     Analyzes historical stock performance using price data and AWS Bedrock.
     Returns analysis, sentiment, and disclaimer.
     """
+    loop = asyncio.get_running_loop()
     try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period=period)
+        def get_history():
+            stock = yf.Ticker(ticker)
+            return stock.history(period=period)
+
+        hist = await loop.run_in_executor(None, get_history)
 
         if hist.empty:
             return {
@@ -894,7 +909,7 @@ Average Daily Volume: {avg_volume:,.0f}
 
         # Call Bedrock for analysis
         try:
-            resp = bedrock_runtime.converse(
+            resp = await loop.run_in_executor(None, partial(bedrock_runtime.converse,
                 modelId=MODEL_ID,
                 messages=[{
                     "role": "user",
@@ -921,7 +936,7 @@ Return ONLY the JSON object, no other text."""
                     "maxTokens": 1000,
                     "temperature": 0.3
                 }
-            )
+            ))
 
             raw_text = resp['output']['message']['content'][0]['text'].strip()
             print(f"--- Bedrock Analysis Response for {ticker} ---")
@@ -1050,15 +1065,20 @@ async def generate_pinned_stocks_overview(userId: str, days: int = 7):
     Returns overview, sentiment, and individual stock summaries.
     """
     try:
+        loop = asyncio.get_running_loop()
         # 1. Get user's pinned stocks
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT ticker, name FROM favorites WHERE user_id = ?",
-            (userId,)
-        )
-        rows = cursor.fetchall()
-        conn.close()
+        def get_db_favorites():
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT ticker, name FROM favorites WHERE user_id = ?",
+                (userId,)
+            )
+            rows = cursor.fetchall()
+            conn.close()
+            return rows
+
+        rows = await loop.run_in_executor(None, get_db_favorites)
 
         if not rows:
             return {
@@ -1143,7 +1163,7 @@ async def generate_pinned_stocks_overview(userId: str, days: int = 7):
         portfolio_context = "\n\n".join(all_news_combined)
 
         try:
-            resp = bedrock_runtime.converse(
+            resp = await loop.run_in_executor(None, partial(bedrock_runtime.converse,
                 modelId=MODEL_ID,
                 messages=[{
                     "role": "user",
@@ -1169,7 +1189,7 @@ Return ONLY the JSON object, no other text."""
                     "maxTokens": 1000,
                     "temperature": 0.3
                 }
-            )
+            ))
 
             raw_text = resp['output']['message']['content'][0]['text'].strip()
             print(f"--- Portfolio Overview Response ---")
