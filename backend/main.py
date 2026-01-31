@@ -1293,7 +1293,7 @@ async def get_pinned_stocks_overview(userId: str, days: int = 7):
         raise HTTPException(status_code=400, detail="days must be between 1 and 30")
 
     try:
-        result = generate_pinned_stocks_overview(userId.strip(), days)
+        result = await generate_pinned_stocks_overview(userId.strip(), days)
         return result
 
     except HTTPException:
