@@ -1090,6 +1090,8 @@ def generate_pinned_stocks_overview(userId: str, days: int = 7):
                     })
                     continue
 
+                articles = articles[:5]
+
                 # Extract news texts and URLs
                 news_texts = []
                 news_urls = []
