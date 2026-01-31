@@ -93,10 +93,6 @@ class NewsSummaryResponse(BaseModel):
     sentiment: str
     disclaimer: str
 
-class SummarizeRequest(BaseModel):
-    ticker: str
-    period: int = 7
-
 # --- Helper Functions ---
 def fetch_price_data(tickers):
     """
@@ -571,9 +567,7 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
 
 
 @app.post("/summarize-news", response_model=dict)
-async def get_summarized_news(request: SummarizeRequest):
-    ticker = request.ticker
-    period = request.period
+async def get_summarized_news(ticker: str, period: int = 7):
     news = get_company_news(ticker, period)
     articles = news.get("articles", [])
     
@@ -591,14 +585,14 @@ async def get_summarized_news(request: SummarizeRequest):
     for article in articles:
         # Handle both dicts and objects (Pydantic models)
         if isinstance(article, dict):
-            news_texts.append(article.get("summary", ""))
-            news_urls.append(article.get("url", ""))
+            news_texts.append(article.get("summary", "") or "")
+            news_urls.append(article.get("url", "") or "")
         else:
-            news_texts.append(getattr(article, "summary", ""))
-            news_urls.append(getattr(article, "url", ""))
+            news_texts.append(getattr(article, "summary", "") or "")
+            news_urls.append(getattr(article, "url", "") or "")
             
-    request = NewsSummaryRequest(ticker=ticker, news=news_texts, urls=news_urls)
-    result = await summarize_news(request)
+    summary_request = NewsSummaryRequest(ticker=ticker, news=news_texts, urls=news_urls)
+    result = await summarize_news(summary_request)
     if result is None:
         return {
             "summary": "Summary unavailable.",
