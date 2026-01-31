@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import LoadingSpinner from './LoadingSpinner'
 
-export default function Panel({ title, isExpanded, isCollapsed, onExpand, onCollapse, isLoading }) {
+export default function Panel({ title, isExpanded, isCollapsed, onExpand, onCollapse, isLoading, children}) {
     const handleClick = () => {
         if (isExpanded) {
             onCollapse()
@@ -45,9 +45,14 @@ export default function Panel({ title, isExpanded, isCollapsed, onExpand, onColl
                     {isLoading ? (
                         <LoadingSpinner />
                     ) : (
-                        <div>
-                            {/* Your actual content will go here */}
-                            <p className="text-gray-500">Content for {title}</p>
+                        <div className="p-4 overflow-y-auto custom-scrollbar" style={{ height: 'calc(100% - 60px)' }}>
+                            {isLoading ? (
+                                <LoadingSpinner />
+                            ) : (
+                                <div>
+                                    {children} {}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
