@@ -4,6 +4,7 @@ import subprocess
 import boto3
 import re
 import yfinance as yf
+import json
 import sqlite3
 from pydantic import BaseModel
 import random
@@ -90,6 +91,14 @@ class NewsSummaryRequest(BaseModel):
 class NewsSummaryResponse(BaseModel):
     summary: str
     sources: List[str]
+    sentiment: str
+    disclaimer: str
+
+class StockAnalysisResponse(BaseModel):
+    ticker: str
+    period: str
+    analysis: str
+    key_metrics: dict
     sentiment: str
     disclaimer: str
 
@@ -629,7 +638,6 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-
 @app.post("/summarize-news", response_model=dict)
 async def get_summarized_news(ticker: str, period: int = 7):
     news = get_company_news(ticker, period)
@@ -666,12 +674,6 @@ async def get_summarized_news(ticker: str, period: int = 7):
         }
     return result
 
-
-import boto3
-import json
-import re
-
-
 async def summarize_news(request: NewsSummaryRequest):
     """
     Changed to 'async def' so it can be awaited by the endpoint.
@@ -682,3 +684,221 @@ async def summarize_news(request: NewsSummaryRequest):
         return summarize_news_with_bedrock(request.ticker, request.news, request.urls)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
+
+
+# Add this Pydantic model with your other models
+class StockAnalysisResponse(BaseModel):
+    ticker: str
+    period: str
+    analysis: str
+    key_metrics: dict
+    sentiment: str
+    disclaimer: str
+
+
+# Add this helper function with your other helper functions
+def analyze_stock_performance(ticker, period="1y"):
+    """
+    Analyzes historical stock performance using price data and AWS Bedrock.
+    Returns analysis, key metrics, and sentiment.
+    """
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period=period)
+
+        if hist.empty:
+            return {
+                "error": "No historical data available for this ticker.",
+                "ticker": ticker,
+                "period": period
+            }
+
+        # Calculate key metrics
+        current_price = float(hist['Close'].iloc[-1])
+        start_price = float(hist['Close'].iloc[0])
+        high_price = float(hist['High'].max())
+        low_price = float(hist['Low'].min())
+        avg_volume = float(hist['Volume'].mean())
+
+        total_return = ((current_price - start_price) / start_price) * 100
+        volatility = float(hist['Close'].pct_change().std() * 100)
+
+        # Calculate moving averages if enough data
+        if len(hist) >= 50:
+            ma_50 = float(hist['Close'].rolling(window=50).mean().iloc[-1])
+        else:
+            ma_50 = None
+
+        if len(hist) >= 200:
+            ma_200 = float(hist['Close'].rolling(window=200).mean().iloc[-1])
+        else:
+            ma_200 = None
+
+        # Prepare metrics dictionary
+        key_metrics = {
+            "current_price": round(current_price, 2),
+            "start_price": round(start_price, 2),
+            "total_return_percent": round(total_return, 2),
+            "high_price": round(high_price, 2),
+            "low_price": round(low_price, 2),
+            "volatility_percent": round(volatility, 2),
+            "average_volume": int(avg_volume),
+            "ma_50": round(ma_50, 2) if ma_50 else None,
+            "ma_200": round(ma_200, 2) if ma_200 else None
+        }
+
+        # Prepare data summary for Bedrock
+        data_summary = f"""
+Ticker: {ticker}
+Period: {period}
+Current Price: ${current_price:.2f}
+Starting Price: ${start_price:.2f}
+Total Return: {total_return:.2f}%
+52-Week High: ${high_price:.2f}
+52-Week Low: ${low_price:.2f}
+Price Volatility: {volatility:.2f}%
+Average Daily Volume: {avg_volume:,.0f}
+"""
+
+        if ma_50:
+            data_summary += f"50-Day Moving Average: ${ma_50:.2f}\n"
+        if ma_200:
+            data_summary += f"200-Day Moving Average: ${ma_200:.2f}\n"
+
+        # Call Bedrock for analysis
+        try:
+            resp = bedrock_runtime.converse(
+                modelId=MODEL_ID,
+                messages=[{
+                    "role": "user",
+                    "content": [{
+                        "text": f"""Analyze the following historical stock performance data for {ticker}:
+
+{data_summary}
+
+Provide a comprehensive analysis in JSON format with exactly three keys:
+1. "analysis": A detailed 3-4 sentence analysis covering performance trends, volatility, and key observations
+2. "sentiment": One of "bullish", "bearish", or "neutral" based on the technical indicators
+3. "key_insights": A list of 2-3 bullet points highlighting the most important findings
+
+Return ONLY the JSON object, no other text."""
+                    }]
+                }],
+                inferenceConfig={
+                    "maxTokens": 800,
+                    "temperature": 0.3
+                }
+            )
+
+            raw_text = resp['output']['message']['content'][0]['text'].strip()
+            print(f"--- Bedrock Analysis Response for {ticker} ---")
+            print(raw_text)
+            print("--- End Response ---")
+
+            # Extract JSON from response
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0)
+                else:
+                    # Fallback to raw text
+                    return {
+                        "ticker": ticker,
+                        "period": period,
+                        "analysis": raw_text[:500],
+                        "key_metrics": key_metrics,
+                        "sentiment": "neutral",
+                        "disclaimer": "This is automated analysis. Not financial advice."
+                    }
+
+            # Parse JSON
+            import json as json_module
+            data = json_module.loads(json_str)
+
+            analysis_text = data.get("analysis", "Analysis unavailable.")
+            sentiment = data.get("sentiment", "neutral").lower()
+
+            # Validate sentiment
+            if sentiment not in ["bullish", "bearish", "neutral"]:
+                sentiment = "neutral"
+
+            # Add key insights to the analysis if available
+            if "key_insights" in data and data["key_insights"]:
+                insights = data["key_insights"]
+                if isinstance(insights, list):
+                    analysis_text += "\n\nKey Insights:\n" + "\n".join([f"• {insight}" for insight in insights])
+
+            return {
+                "ticker": ticker.upper(),
+                "period": period,
+                "analysis": analysis_text,
+                "key_metrics": key_metrics,
+                "sentiment": sentiment,
+                "disclaimer": "This is automated analysis based on historical data. Not financial advice."
+            }
+
+        except Exception as bedrock_error:
+            print(f"Bedrock error: {bedrock_error}")
+            # Return metrics with basic analysis if Bedrock fails
+            basic_analysis = f"Over the {period} period, {ticker} "
+            if total_return > 0:
+                basic_analysis += f"has gained {total_return:.2f}%, "
+            else:
+                basic_analysis += f"has declined {abs(total_return):.2f}%, "
+            basic_analysis += f"with volatility at {volatility:.2f}%."
+
+            return {
+                "ticker": ticker.upper(),
+                "period": period,
+                "analysis": basic_analysis,
+                "key_metrics": key_metrics,
+                "sentiment": "neutral",
+                "disclaimer": "Basic analysis only. AI analysis unavailable."
+            }
+
+    except Exception as e:
+        print(f"Stock analysis error for {ticker}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error analyzing stock: {str(e)}")
+
+
+# Add this endpoint with your other endpoints
+@app.get("/analyze/{ticker}", response_model=StockAnalysisResponse)
+async def analyze_stock(ticker: str, period: str = "1y"):
+    """
+    Analyze historical stock performance.
+
+    Parameters:
+    - ticker: Stock ticker symbol (e.g., AAPL, TSLA)
+    - period: Time period for analysis (default: 1y)
+              Valid periods: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
+
+    Returns comprehensive analysis including:
+    - AI-generated performance analysis
+    - Key metrics (returns, volatility, moving averages)
+    - Sentiment (bullish/bearish/neutral)
+    """
+    valid_periods = ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max']
+
+    if period not in valid_periods:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid period. Must be one of: {', '.join(valid_periods)}"
+        )
+
+    try:
+        result = analyze_stock_performance(ticker.upper(), period)
+
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
