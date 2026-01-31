@@ -117,60 +117,60 @@ class PinnedStocksOverviewResponse(BaseModel):
 
 
 # Add this as a one-time migration function (call it before init_db on first run)
-# def migrate_favorites_table():
-#     """
-#     Migrate existing favorites table to include user_id column.
-#     This is a one-time migration.
-#     """
-#     conn = sqlite3.connect(DB_FILE)
-#     cursor = conn.cursor()
-#
-#     try:
-#         # Check if the old table exists
-#         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'")
-#         if cursor.fetchone():
-#             # Check if user_id column exists
-#             cursor.execute("PRAGMA table_info(favorites)")
-#             columns = [column[1] for column in cursor.fetchall()]
-#
-#             if 'user_id' not in columns:
-#                 print("Migrating favorites table...")
-#
-#                 # Rename old table
-#                 cursor.execute("ALTER TABLE favorites RENAME TO favorites_old")
-#
-#                 # Create new table with user_id
-#                 cursor.execute("""
-#                                CREATE TABLE favorites
-#                                (
-#                                    id      INTEGER PRIMARY KEY AUTOINCREMENT,
-#                                    user_id TEXT NOT NULL,
-#                                    ticker  TEXT NOT NULL,
-#                                    name    TEXT NOT NULL,
-#                                    UNIQUE (user_id, ticker)
-#                                )
-#                                """)
-#
-#                 # Migrate data with a default user_id
-#                 cursor.execute("""
-#                                INSERT INTO favorites (user_id, ticker, name)
-#                                SELECT 'default_user', ticker, name
-#                                FROM favorites_old
-#                                """)
-#
-#                 # Drop old table
-#                 cursor.execute("DROP TABLE favorites_old")
-#
-#                 conn.commit()
-#                 print("Migration completed successfully!")
-#             else:
-#                 print("Table already has user_id column, no migration needed.")
-#
-#     except Exception as e:
-#         print(f"Migration error: {e}")
-#         conn.rollback()
-#     finally:
-#         conn.close()
+def migrate_favorites_table():
+    """
+    Migrate existing favorites table to include user_id column.
+    This is a one-time migration.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    try:
+        # Check if the old table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'")
+        if cursor.fetchone():
+            # Check if user_id column exists
+            cursor.execute("PRAGMA table_info(favorites)")
+            columns = [column[1] for column in cursor.fetchall()]
+
+            if 'user_id' not in columns:
+                print("Migrating favorites table...")
+
+                # Rename old table
+                cursor.execute("ALTER TABLE favorites RENAME TO favorites_old")
+
+                # Create new table with user_id
+                cursor.execute("""
+                               CREATE TABLE favorites
+                               (
+                                   id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                                   user_id TEXT NOT NULL,
+                                   ticker  TEXT NOT NULL,
+                                   name    TEXT NOT NULL,
+                                   UNIQUE (user_id, ticker)
+                               )
+                               """)
+
+                # Migrate data with a default user_id
+                cursor.execute("""
+                               INSERT INTO favorites (user_id, ticker, name)
+                               SELECT 'default_user', ticker, name
+                               FROM favorites_old
+                               """)
+
+                # Drop old table
+                cursor.execute("DROP TABLE favorites_old")
+
+                conn.commit()
+                print("Migration completed successfully!")
+            else:
+                print("Table already has user_id column, no migration needed.")
+
+    except Exception as e:
+        print(f"Migration error: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
 
 async def fetch_price_data(tickers):
     """
@@ -461,7 +461,7 @@ app = FastAPI()
 @app.on_event("startup")
 async def startup_event():
     # Run migration first (only needed once)
-    # migrate_favorites_table()  # Uncomment this line for one-time migration
+    migrate_favorites_table()  # Uncomment this line for one-time migration
 
     init_db()
 
