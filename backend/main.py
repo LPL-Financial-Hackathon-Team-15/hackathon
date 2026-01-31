@@ -89,7 +89,7 @@ class NewsSummaryRequest(BaseModel):
 
 class NewsSummaryResponse(BaseModel):
     summary: str
-    key_themes: List[str]
+    sources: List[str]
     sentiment: str
     disclaimer: str
 
@@ -158,7 +158,7 @@ def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: L
     if not news_texts:
         return {
             "summary": "No news articles found to summarize.",
-            "key_themes": [],
+            "sources": [],
             "sentiment": "neutral",
             "disclaimer": "No data available."
         }
@@ -171,7 +171,7 @@ def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: L
     system_prompt = f"""You find and summarize recent news about {ticker}. 
 Be factual: extract key events, sentiments, themes. 
 Do NOT give buy/sell/hold advice, price targets, or portfolio suggestions.
-Output ONLY valid JSON: {{"summary": "brief overall summary", "key_themes": ["theme1", "theme2"], "sentiment": "neutral|positive|negative"}}"""
+Output ONLY valid JSON: {{"summary": "brief overall summary", "sentiment": "neutral|positive|negative"}}"""
 
     messages = [{"role": "user", "content": [{"text": f"Summarize these articles:\n{news_content}"}]}]
 
@@ -190,7 +190,7 @@ Output ONLY valid JSON: {{"summary": "brief overall summary", "key_themes": ["th
         if resp.get('guardrailStatus') == 'BLOCKED':
             return {
                 "summary": "Content filtered for safety - no advice allowed.",
-                "key_themes": [],
+                "sources": [],
                 "sentiment": "neutral",
                 "disclaimer": "Informational only; not financial advice."
             }
@@ -200,15 +200,16 @@ Output ONLY valid JSON: {{"summary": "brief overall summary", "key_themes": ["th
 
         return {
             **parsed,
+            "sources": news_urls if news_urls else [],
             "disclaimer": "This summarizes public news only. Not financial advice."
         }
 
     except json.JSONDecodeError:
-        return {"summary": "Summary generation failed.", "key_themes": [], "sentiment": "neutral",
+        return {"summary": "Summary generation failed.", "sources": [], "sentiment": "neutral",
                 "disclaimer": "Error occurred."}
     except Exception as e:
         print(f"Bedrock error: {e}")
-        return {"summary": f"Service error: {str(e)}", "key_themes": [], "sentiment": "neutral",
+        return {"summary": f"Service error: {str(e)}", "sources": [], "sentiment": "neutral",
                 "disclaimer": "Try again."}
 
 
@@ -570,7 +571,7 @@ async def get_summarized_news(ticker: str, period: int = 7):
     if not articles:
         return {
             "summary": "No recent news found for this ticker.",
-            "key_themes": [],
+            "sources": [],
             "sentiment": "neutral",
             "disclaimer": "No data available."
         }
@@ -592,7 +593,7 @@ async def get_summarized_news(ticker: str, period: int = 7):
     if result is None:
         return {
             "summary": "Summary unavailable.",
-            "key_themes": [],
+            "sources": [],
             "sentiment": "neutral",
             "disclaimer": "Error processing request."
         }
@@ -603,7 +604,7 @@ async def summarize_news(request: NewsSummaryRequest):
     try:
         result = summarize_news_with_bedrock(request.ticker, request.news, request.urls)
         if result is None:
-            return {"summary": "Summary unavailable.", "key_themes": [], "sentiment": "neutral", "disclaimer": "Error."}
+            return {"summary": "Summary unavailable.", "sources": [], "sentiment": "neutral", "disclaimer": "Error."}
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
