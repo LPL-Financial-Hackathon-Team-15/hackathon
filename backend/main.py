@@ -151,73 +151,55 @@ def fetch_price_data(tickers):
 
     return results
 
-from typing import List
 
-
-def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: List[str] = None) -> dict:
-    # 1. Strict Input Management
-    MAX_ARTICLES = 5  # Reduce to 5 for high-volume tickers like AAPL
-    MAX_CHARS_PER_ARTICLE = 2000
-
-    news_texts = [text[:MAX_CHARS_PER_ARTICLE] for text in news_texts[:MAX_ARTICLES]]
-    news_urls = news_urls[:MAX_ARTICLES] if news_urls else []
-
-    if not news_texts:
-        return {"summary": "No news found.", "sources": [], "sentiment": "neutral", "disclaimer": "No data."}
-
-    # 2. Construct Content
-    news_content = "\n\n".join([f"Article {i + 1}: {text}" for i, text in enumerate(news_texts)])
-
-    system_prompt = (
-        f"You are a reading comprehension assistant. "
-        f"Extract the three most important facts about {ticker} from the provided text. "
-        "Classify the overall tone of the writing (Positive, Negative, or Neutral). "
-        "Do not provide analysis, opinions, or advice. Return only valid JSON."
-    )
-
-    messages = [{"role": "user", "content": [{"text": f"Summarize:\n{news_content}"}]}]
+def summarize_news_with_bedrock(ticker, news_texts, news_urls=None):
+    # Ensure articles are trimmed to avoid overloading the context
+    cleaned_texts = [t[:2000] for t in news_texts[:5]]
+    news_content = "\n\n".join(cleaned_texts)
 
     try:
         resp = bedrock_runtime.converse(
             modelId=MODEL_ID,
-            messages=[{"role": "user", "content": [{"text": f"Summarize news for {ticker} in JSON format."}]}],
-            system=[{"text": "Return ONLY JSON with keys 'summary' and 'sentiment'."}],
-            inferenceConfig={"maxTokens": 500, "temperature": 0.1}
+            messages=[{"role": "user", "content": [{"text": f"Summarize facts for {ticker}:\n{news_content}"}]}],
+            system=[{"text": "Return JSON with keys 'summary' and 'sentiment'. No other text."}],
+            inferenceConfig={"maxTokens": 600, "temperature": 0}
         )
 
-        # 1. Precise Extraction
-        output_text = resp['output']['message']['content'][0]['text'].strip()
+        # 1. THE CULPRIT CHECK: Print the raw output to your terminal
+        raw_text = resp['output']['message']['content'][0]['text'].strip()
+        print(f"--- DEBUG RAW START ---\n{raw_text}\n--- DEBUG RAW END ---")
 
-        # DEBUG: Un-comment this to see what the model is actually saying in your console
-        # print(f"DEBUG RAW OUTPUT: {output_text}")
+        if not raw_text:
+            return {"summary": "Model returned literally nothing.", "sentiment": "neutral"}
 
-        # 2. Try to find JSON inside the text
-        json_match = re.search(r'\{.*\}', output_text, re.DOTALL)
+        # 2. Aggressive JSON Extraction
+        # This handles: "Here is the JSON: {...}", ```json {...} ```, and plain {...}
+        json_pattern = r'\{.*\}'
+        match = re.search(json_pattern, raw_text, re.DOTALL)
 
-        if json_match:
+        if match:
             try:
-                parsed = json.loads(json_match.group(0))
+                data = json.loads(match.group(0))
                 return {
-                    "summary": parsed.get("summary", "Summary key missing in JSON."),
-                    "sentiment": parsed.get("sentiment", "neutral"),
+                    "summary": data.get("summary", "Key 'summary' missing in JSON"),
+                    "sentiment": data.get("sentiment", "neutral"),
                     "sources": news_urls or []
                 }
             except json.JSONDecodeError:
-                # If it found { } but they weren't valid JSON
-                return {"summary": output_text, "sentiment": "neutral", "sources": news_urls}
+                # If it's not valid JSON, just use the raw text as the summary
+                return {"summary": raw_text, "sentiment": "neutral", "sources": news_urls}
 
-        # 3. Fallback: If no { } found, just return the raw text as the summary
-        if output_text:
-            return {
-                "summary": output_text,
-                "sentiment": "neutral",
-                "sources": news_urls or []
-            }
-
-        return {"summary": "Model returned an empty string.", "sources": news_urls}
+        # 3. Fallback: If no curly braces were found at all
+        return {
+            "summary": raw_text,
+            "sentiment": "neutral",
+            "sources": news_urls,
+            "error": "Non-JSON response received"
+        }
 
     except Exception as e:
-        return {"summary": f"System Error: {str(e)}", "sources": news_urls}
+        print(f"CRITICAL ERROR: {str(e)}")
+        return {"summary": f"Python Error: {str(e)}", "sentiment": "error"}
 
 
 def update_explore_stocks():
