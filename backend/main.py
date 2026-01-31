@@ -789,7 +789,7 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-@app.post("/summarize-news", response_model=dict)
+@app.post("/summarize-news/{ticker}", response_model=dict)
 async def get_summarized_news(ticker: str, period: int = 7):
     news = get_company_news(ticker, period)
     articles = news.get("articles", [])
@@ -1267,7 +1267,7 @@ Return ONLY the JSON object, no other text."""
 
 
 # Add this endpoint
-@app.get("/pinned/overview", response_model=PinnedStocksOverviewResponse)
+@app.get("/pinned/overview/{userId}", response_model=PinnedStocksOverviewResponse)
 async def get_pinned_stocks_overview(userId: str, days: int = 7):
     """
     Get a comprehensive overview of all pinned stocks including news analysis.
