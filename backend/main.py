@@ -1300,3 +1300,51 @@ async def get_pinned_stocks_overview(userId: str, days: int = 7):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Overview generation failed: {str(e)}")
+
+
+@app.get("/news/market/summary")
+async def summarize_market_news(days: int = 7):
+    """
+    Fetches general market news and returns an AI-generated summary and sentiment.
+    """
+
+    # 1. Fetch general market news
+    articles = fetch_market_news(category="general", days=days)
+
+    if not articles:
+        return {
+            "summary": "No recent market news available.",
+            "sentiment": "neutral",
+            "sources": [],
+            "disclaimer": "No data available."
+        }
+
+    # Limit to 5 articles
+    articles = articles[:5]
+
+    # 2. Extract article summaries and URLs
+    news_texts = []
+    news_urls = []
+
+    for article in articles:
+        if isinstance(article, dict):
+            news_texts.append(article.get("summary", "") or "")
+            news_urls.append(article.get("url", "") or "")
+        else:
+            news_texts.append(getattr(article, "summary", "") or "")
+            news_urls.append(getattr(article, "url", "") or "")
+
+    # 3. Summarize using Bedrock
+    result = summarize_news_with_bedrock(
+        ticker="Overall Market",
+        news_texts=news_texts,
+        news_urls=news_urls
+    )
+
+    # 4. Return response
+    return {
+        "summary": result.get("summary"),
+        "sentiment": result.get("sentiment"),
+        "sources": result.get("sources"),
+        "disclaimer": result.get("disclaimer")
+    }
