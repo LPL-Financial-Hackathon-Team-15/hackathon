@@ -9,6 +9,8 @@ import pandas as pd
 from typing import List
 from services.finnhub_service import fetch_company_news, fetch_market_news
 import os
+import get_1000
+from backend.get_1000 import get_tickers_from_wikipedia
 
 # --- Database Setup ---
 DB_FILE = "favorites.db"
@@ -357,6 +359,10 @@ def get_top_tickers():
 def get_explore_stocks():
     file_path = os.path.join(os.path.dirname(__file__), 'top-1000.txt')
     stock_list = []
+
+    # Only call get_top_1000 if the file doesn't exist
+    if not os.path.exists(file_path):
+        get_1000.get_top_1000()
 
     if os.path.exists(file_path):
         try:
