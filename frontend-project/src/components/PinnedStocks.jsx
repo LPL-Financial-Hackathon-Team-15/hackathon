@@ -4,12 +4,14 @@ import StockCard from './StockCard'
 import ConfirmDialog from './ConfirmDialog'
 import FilterPanel from './FilterPanel'
 import { api } from '../services/api'
+import { StockGraph } from './StockGraph.jsx';
 
 export default function PinnedStocks() {
     const [pinnedStocks, setPinnedStocks] = useState([])
     const [allPinnedStocks, setAllPinnedStocks] = useState([]) // Store unfiltered stocks
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
+    const [selectedTicker, setSelectedTicker] = useState(null)
     const [confirmDialog, setConfirmDialog] = useState({
         isOpen: false,
         stockIndex: null,
