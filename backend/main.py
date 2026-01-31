@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import subprocess
+import boto3
+import json
 import yfinance as yf
 import sqlite3
 from pydantic import BaseModel
@@ -12,6 +14,14 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
 import threading
 
+
+# Bedrock setup - Replace with your actual values after creating guardrail
+BEDROCK_REGION = 'us-east-2'  # Or your Bedrock region
+MODEL_ID = 'anthropic.claude-3-sonnet-20240229-v1:0'  # Claude Sonnet (good for summarization)
+GUARDRAIL_ID = 'your-guardrail-id-here'  # From create_guardrail response
+GUARDRAIL_VERSION = 'DRAFT'  # Or specific version e.g. 'USD5Z3EXAMPLE'
+
+bedrock_runtime = boto3.client('bedrock-runtime', region_name=BEDROCK_REGION)
 
 # --- Database Setup ---
 DB_FILE = "favorites.db"
@@ -72,6 +82,16 @@ class MarketNewsResponse(BaseModel):
     article_count: int
     articles: List[NewsArticle]
 
+class NewsSummaryRequest(BaseModel):
+    ticker: str
+    news: List[str]  # List of article texts you provide
+
+class NewsSummaryResponse(BaseModel):
+    summary: str
+    key_themes: List[str]
+    sentiment: str
+    disclaimer: str
+
 # --- Helper Functions ---
 def fetch_price_data(tickers):
     """
@@ -127,6 +147,57 @@ def fetch_price_data(tickers):
 
     return results
 
+
+# NEW: Bedrock summarizer with guardrails
+def summarize_news_with_bedrock(ticker: str, news_texts: List[str]) -> dict:
+    """
+    Summarizes provided news using Bedrock + Guardrails.
+    Returns JSON or error.
+    """
+    news_content = "\n\n".join([f"Article {i + 1}: {text}" for i, text in enumerate(news_texts)])
+
+    system_prompt = f"""You summarize recent news about {ticker}. 
+Be factual: extract key events, sentiments, themes. 
+Do NOT give buy/sell/hold advice, price targets, or portfolio suggestions.
+Output ONLY valid JSON: {{"summary": "brief overall summary", "key_themes": ["theme1", "theme2"], "sentiment": "neutral|positive|negative"}}"""
+
+    messages = [{"role": "user", "content": [{"text": f"Summarize these articles:\n{news_content}"}]}]
+
+    try:
+        resp = bedrock_runtime.converse(
+            modelId=MODEL_ID,
+            messages=messages,
+            system=[{"text": system_prompt}],
+            guardrailConfig={
+                "guardrailIdentifier": GUARDRAIL_ID,
+                "guardrailVersion": GUARDRAIL_VERSION
+            },
+            inferenceConfig={"maxTokens": 1000, "temperature": 0.1}
+        )
+
+        if resp.get('guardrailStatus') == 'BLOCKED':
+            return {
+                "summary": "Content filtered for safety - no advice allowed.",
+                "key_themes": [],
+                "sentiment": "neutral",
+                "disclaimer": "Informational only; not financial advice."
+            }
+
+        output_text = resp['output']['message']['content'][0]['text']
+        parsed = json.loads(output_text)  # Enforce JSON
+
+        return {
+            **parsed,
+            "disclaimer": "This summarizes public news only. Not financial advice."
+        }
+
+    except json.JSONDecodeError:
+        return {"summary": "Summary generation failed.", "key_themes": [], "sentiment": "neutral",
+                "disclaimer": "Error occurred."}
+    except Exception as e:
+        print(f"Bedrock error: {e}")
+        return {"summary": f"Service error: {str(e)}", "key_themes": [], "sentiment": "neutral",
+                "disclaimer": "Try again."}
 
 
 # Background job to update explore stocks
@@ -466,3 +537,13 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+
+@app.post("/summarize-news", response_model=dict)
+async def summarize_news(request: NewsSummaryRequest):
+    """NEW: Summarize your provided news with Bedrock Guardrails"""
+    try:
+        result = summarize_news_with_bedrock(request.ticker, request.news)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
