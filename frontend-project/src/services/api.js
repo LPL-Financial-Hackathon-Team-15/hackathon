@@ -39,7 +39,7 @@ export const api = {
 
     // Example: Get all stocks
     getAllStocks: async (limit = 500, offset = 0) => {
-        const response = await fetch(`${API_BASE_URL}/explore?limit=${limit}&offset=${offset}`);
+        const response = await fetch(`${API_BASE_URL}/explore/investor_01?limit=${limit}&offset=${offset}`);
         if (!response.ok) throw new Error('Failed to fetch stocks');
         const data = await response.json();
         return data.stocks; // Extract the stocks array from the response
