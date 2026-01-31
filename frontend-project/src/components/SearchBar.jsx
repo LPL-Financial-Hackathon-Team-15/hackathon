@@ -1,11 +1,18 @@
-// components/SearchBar.jsx
+// components/SearchBar.jsx - update to trigger on every keystroke
 import { useState } from 'react'
 
 export default function SearchBar({ onSearch }) {
     const [searchTerm, setSearchTerm] = useState('')
 
+    const handleChange = (e) => {
+        const value = e.target.value
+        setSearchTerm(value)
+        onSearch(value) // Call onSearch on every keystroke
+    }
+
     const handleSubmit = (e) => {
         e.preventDefault()
+        // Still handle submit if user presses Enter
         if (searchTerm.trim()) {
             onSearch(searchTerm)
         }
@@ -17,9 +24,9 @@ export default function SearchBar({ onSearch }) {
                 <input
                     type="text"
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={handleChange}
                     placeholder="Search stocks by ticker or company name..."
-                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#07407b] focus:border-transparent"
+                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#07407b] focus:border-transparent"
                 />
                 <button
                     type="submit"

@@ -1,22 +1,40 @@
 // pages/ExplorePage.jsx
 import { useState } from 'react'
 import ExploreStocks from '../components/ExploreStocks'
-import ExploreRightPanels from '../components/ExploreRightPanels.jsx'
+import ExploreRightPanels from '../components/ExploreRightPanels'
 
 export default function ExplorePage() {
-    const [searchResults, setSearchResults] = useState([])
+    const [allStocks, setAllStocks] = useState([]) // Store all stocks
+    const [filteredStocks, setFilteredStocks] = useState([]) // Store filtered results
 
     const handleSearch = (searchTerm) => {
-        console.log('Searching for:', searchTerm)
-        // Add your search API call here
-        // For now, you can set dummy data:
-        // setSearchResults([...])
+        if (!searchTerm || searchTerm.trim() === '') {
+            // If search is empty, show all stocks
+            setFilteredStocks(allStocks)
+            return
+        }
+
+        const term = searchTerm.toLowerCase().trim()
+
+        // Filter by ticker or name
+        const filtered = allStocks.filter(stock =>
+            stock.ticker.toLowerCase().includes(term) ||
+            stock.name.toLowerCase().includes(term)
+        )
+
+        setFilteredStocks(filtered)
     }
 
     return (
         <div className="flex">
-            <ExploreStocks searchResults={searchResults} />
-            <ExploreRightPanels onSearch={handleSearch} />
+            <ExploreStocks
+                searchResults={filteredStocks}
+                setSearchResults={setFilteredStocks}
+                allStocks={allStocks}
+                setAllStocks={setAllStocks}
+                onSearch={handleSearch}
+            />
+            <ExploreRightPanels />
         </div>
     )
 }

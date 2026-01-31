@@ -1,14 +1,12 @@
 // components/HomeStockCard.jsx
 import { useState } from 'react'
 
-export default function StockCard({ ticker, name, currentPrice, costChange, percentageChange, pinned, onPin, onDelete }) {
+export default function StockCard({ ticker, name, currentPrice, costChange, percentageChange, pinned, isLoading, hasError, onPin, onDelete }) {
     const [showPercentage, setShowPercentage] = useState(false)
 
-    // Determine if change is positive or negative
     const isPositive = costChange >= 0
     const changeColor = isPositive ? 'text-green-600' : 'text-red-600'
 
-    // Format the display values
     const formattedPrice = currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     const formattedCostChange = `${isPositive ? '+' : ''}${costChange.toFixed(2)}`
     const formattedPercentageChange = `${isPositive ? '+' : ''}${percentageChange.toFixed(1)}%`
@@ -37,18 +35,34 @@ export default function StockCard({ ticker, name, currentPrice, costChange, perc
                                           clipRule="evenodd"/>
                                 </svg>
                             </button>
-                            ) : (
+                        ) : (
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation()
-                                    onPin()
+                                    if (!isLoading) onPin()
                                 }}
-                                className="text-gray-400 hover:text-[#07407b] transition-colors p-1"
-                                title="Pin"
+                                disabled={isLoading}
+                                className={`transition-colors p-1 relative ${
+                                    hasError
+                                        ? 'text-red-600'
+                                        : 'text-gray-400 hover:text-[#07407b]'
+                                } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title={hasError ? "Failed to pin" : "Pin"}
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M14,4v5c0,1.12,0.37,2.16,1,3H9c0.65-0.86,1-1.9,1-3V4H14 M17,2H7C6.45,2,6,2.45,6,3c0,0.55,0.45,1,1,1c0,0,0,0,0,0l1,0v5 c0,1.66-1.34,3-3,3v2h5.97v7l1,1l1-1v-7H19v-2c0,0,0,0,0,0c-1.66,0-3-1.34-3-3V4l0,0c0,0,0,0,0,0l1,0c0.55,0,1-0.45,1-1 C18,2.45,17.55,2,17,2L17,2z" transform="rotate(-45 12 12)"/>
-                                </svg>
+                                {isLoading ? (
+                                    // Loading spinner
+                                    <div className="h-5 w-5 border-2 border-[#07407b] border-t-transparent rounded-full animate-spin"></div>
+                                ) : hasError ? (
+                                    // Error icon
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                    </svg>
+                                ) : (
+                                    // Diagonal outline pin
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" transform="rotate(45 12 12)"/>
+                                    </svg>
+                                )}
                             </button>
                         )
                     }
