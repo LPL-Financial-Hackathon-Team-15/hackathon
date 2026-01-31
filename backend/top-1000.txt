@@ -2,6 +2,7 @@ MMM|3M
 AOS|A. O. Smith
 ABT|Abbott Laboratories
 ABBV|AbbVie
+S&P 500|S&P 500
 ACN|Accenture
 ADBE|Adobe Inc.
 AMD|Advanced Micro Devices
