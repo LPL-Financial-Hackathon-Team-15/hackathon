@@ -1049,7 +1049,7 @@ async def analyze_stock(ticker: str, period: str = "1y"):
         )
 
     try:
-        result = analyze_stock_performance(ticker.upper(), period)
+        result = await analyze_stock_performance(ticker.upper(), period)
         return result
 
     except HTTPException:
