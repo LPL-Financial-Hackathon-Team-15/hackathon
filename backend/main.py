@@ -642,12 +642,69 @@ async def get_summarized_news(ticker: str, period: int = 7):
         }
     return result
 
-async def summarize_news(request: NewsSummaryRequest):
-    """NEW: Summarize your provided news with Bedrock Guardrails"""
+
+import boto3
+import json
+import re
+
+
+def summarize_news(news_text, ticker="the company", model_id="anthropic.claude-3-sonnet-20240229-v1:0"):
+    """
+    Summarizes financial news using Claude on Bedrock with a focus on market impact.
+    """
+    # 1. Initialize Bedrock Client
+    bedrock = boto3.client(service_name='bedrock-runtime', region_name='us-east-1')
+
+    # 2. Construct the Prompt (Optimized for Claude)
+    # Note: We use XML-like tags to help Claude distinguish between instructions and data.
+    prompt = f"""
+    Human: You are a senior financial analyst. Summarize the following news article for ${ticker}.
+
+    Provide the output in the following JSON format:
+    {{
+        "headline": "One sentence punchy summary",
+        "key_points": ["point 1", "point 2"],
+        "sentiment": "Bullish/Bearish/Neutral",
+        "market_impact": "High/Medium/Low"
+    }}
+
+    Article Text:
+    <article>
+    {news_text}
+    </article>
+
+    Assistant: {{"""
+
+    # 3. Configure Payload
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 1000,
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": prompt}]
+            }
+        ],
+        "temperature": 0.1  # Low temperature for factual consistency
+    })
+
     try:
-        result = summarize_news_with_bedrock(request.ticker, request.news, request.urls)
-        if result is None:
-            return {"summary": "Summary unavailable.", "sources": [], "sentiment": "neutral", "disclaimer": "Error."}
-        return result
+        # 4. Invoke Model
+        response = bedrock.invoke_model(body=body, modelId=model_id)
+        response_body = json.loads(response.get('body').read())
+
+        # Extract the text content
+        raw_completion = response_body['content'][0]['text']
+
+        # 5. Clean and Parse JSON
+        # Since we pre-filled the prompt with '{', we add it back to the completion
+        full_json_str = "{" + raw_completion
+
+        # Use Regex to find the JSON block if Claude added extra text
+        match = re.search(r'(\{.*\}|\[.*\])', full_json_str, re.DOTALL)
+        if match:
+            return json.loads(match.group(1))
+        return {"error": "Could not parse JSON", "raw": raw_completion}
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
+        return {"error": str(e)}
