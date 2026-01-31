@@ -17,7 +17,7 @@ import threading
 
 # Bedrock setup - Replace with your actual values after creating guardrail
 BEDROCK_REGION = 'us-east-2'  # Or your Bedrock region
-MODEL_ID = 'anthropic.claude-3-5-sonnet-20240620-v1:0'  # Claude Sonnet (good for summarization)
+MODEL_ID = 'us.anthropic.claude-3-5-sonnet-20240620-v1:0'  # Claude Sonnet (good for summarization)
 GUARDRAIL_ID = 'f1mk0d93g9xs'  # From create_guardrail response
 GUARDRAIL_VERSION = 'DRAFT'  # Or specific version e.g. 'USD5Z3EXAMPLE'
 
