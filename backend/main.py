@@ -150,12 +150,15 @@ def fetch_price_data(tickers):
 
 
 # NEW: Bedrock summarizer with guardrails
-def summarize_news_with_bedrock(ticker: str, news_texts: List[str]) -> dict:
+def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: List[str] = None) -> dict:
     """
     Summarizes provided news using Bedrock + Guardrails.
     Returns JSON or error.
     """
-    news_content = "\n\n".join([f"Article {i + 1}: {text}" for i, text in enumerate(news_texts)])
+    if news_urls and len(news_urls) == len(news_texts):
+        news_content = "\n\n".join([f"Article {i + 1}:\nSource: {news_urls[i]}\nContent: {text}" for i, text in enumerate(news_texts)])
+    else:
+        news_content = "\n\n".join([f"Article {i + 1}: {text}" for i, text in enumerate(news_texts)])
 
     system_prompt = f"""You find and summarize recent news about {ticker}. 
 Be factual: extract key events, sentiments, themes. 
@@ -553,15 +556,28 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
 
 @app.post("/summarize-news", response_model=dict)
 async def get_summarized_news(ticker: str, period: int = 7):
-    news = get_company_news(ticker, period)
-
-
-
+    news_data = get_company_news(ticker, period)
+    articles = news_data.get("articles", [])
+    
+    news_texts = []
+    news_urls = []
+    
+    for article in articles:
+        # Handle both dicts and objects (Pydantic models)
+        if isinstance(article, dict):
+            news_texts.append(article.get("summary", ""))
+            news_urls.append(article.get("url", ""))
+        else:
+            news_texts.append(getattr(article, "summary", ""))
+            news_urls.append(getattr(article, "url", ""))
+            
+    request = NewsSummaryRequest(ticker=ticker, news=news_texts, urls=news_urls)
+    return await summarize_news(request)
 
 async def summarize_news(request: NewsSummaryRequest):
     """NEW: Summarize your provided news with Bedrock Guardrails"""
     try:
-        result = summarize_news_with_bedrock(request.ticker, request.news)
+        result = summarize_news_with_bedrock(request.ticker, request.news, request.urls)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
