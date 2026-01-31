@@ -180,52 +180,44 @@ def summarize_news_with_bedrock(ticker: str, news_texts: List[str], news_urls: L
     try:
         resp = bedrock_runtime.converse(
             modelId=MODEL_ID,
-            messages=messages,
-            system=[{"text": system_prompt}],
-            guardrailConfig={
-                "guardrailIdentifier": GUARDRAIL_ID,
-                "guardrailVersion": GUARDRAIL_VERSION
-            },
+            messages=[{"role": "user", "content": [{"text": f"Summarize news for {ticker} in JSON format."}]}],
+            system=[{"text": "Return ONLY JSON with keys 'summary' and 'sentiment'."}],
             inferenceConfig={"maxTokens": 500, "temperature": 0.1}
         )
 
-        # 3. Handle Guardrails
-        if resp.get('guardrailStatus') == 'BLOCKED':
-            return {"summary": "Blocked by safety filter.", "sources": news_urls, "sentiment": "neutral",
-                    "disclaimer": "Guardrail trigger."}
+        # 1. Precise Extraction
+        output_text = resp['output']['message']['content'][0]['text'].strip()
 
-        # 4. Safe Extraction
-        output_content = resp['output']['message']['content']
-        if not output_content:
-            return {"summary": "Model returned no text.", "sources": news_urls, "sentiment": "neutral",
-                    "disclaimer": "Empty response."}
+        # DEBUG: Un-comment this to see what the model is actually saying in your console
+        # print(f"DEBUG RAW OUTPUT: {output_text}")
 
-        output_text = output_content[0]['text'].strip()
-
-        # 5. Robust JSON Parsing
+        # 2. Try to find JSON inside the text
         json_match = re.search(r'\{.*\}', output_text, re.DOTALL)
+
         if json_match:
             try:
                 parsed = json.loads(json_match.group(0))
                 return {
-                    "summary": parsed.get("summary", "No summary provided."),
+                    "summary": parsed.get("summary", "Summary key missing in JSON."),
                     "sentiment": parsed.get("sentiment", "neutral"),
-                    "sources": news_urls,
-                    "disclaimer": "Summarized news. Not financial advice."
+                    "sources": news_urls or []
                 }
             except json.JSONDecodeError:
-                pass  # Fall through to error return
+                # If it found { } but they weren't valid JSON
+                return {"summary": output_text, "sentiment": "neutral", "sources": news_urls}
 
-        # Fallback if JSON is malformed or missing
-        return {
-            "summary": output_text[:500] if output_text else "Failed to parse summary.",
-            "sentiment": "neutral",
-            "sources": news_urls,
-            "disclaimer": "Note: Response was not in expected JSON format."
-        }
+        # 3. Fallback: If no { } found, just return the raw text as the summary
+        if output_text:
+            return {
+                "summary": output_text,
+                "sentiment": "neutral",
+                "sources": news_urls or []
+            }
+
+        return {"summary": "Model returned an empty string.", "sources": news_urls}
 
     except Exception as e:
-        return {"summary": "Service error.", "sources": news_urls, "sentiment": "neutral", "disclaimer": str(e)}# Background job to update explore stocks
+        return {"summary": f"System Error: {str(e)}", "sources": news_urls}
 
 
 def update_explore_stocks():
