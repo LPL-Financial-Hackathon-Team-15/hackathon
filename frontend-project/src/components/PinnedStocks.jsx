@@ -206,7 +206,7 @@ export default function PinnedStocks() {
                 </div>
 
                 {/* Stock Cards - Scrollable */}
-                <div className={`flex-1 overflow-y-scroll p-4 custom-scrollbar ${pinnedStocks.length <= 3 ? 'flex flex-col justify-center' : 'space-y-3'}`}>
+                <div className={`flex-1 overflow-y-scroll p-4 custom-scrollbar ${pinnedStocks.length <= 3 ? 'flex flex-col' : 'space-y-3'}`}>
                     {pinnedStocks.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full text-gray-400">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

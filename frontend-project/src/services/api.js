@@ -10,13 +10,13 @@ export const api = {
     },
 
     getPinned: async () => {
-        const response = await fetch(`${API_BASE_URL}/pinned`);
+        const response = await fetch(`${API_BASE_URL}/pinned/investor_01`);
         if (!response.ok) throw new Error('Failed to fetch pinned stocks');
         return response.json();
     },
 
     addPinned: async (ticker) => {
-        const response = await fetch(`${API_BASE_URL}/pinned/${ticker}`, {
+        const response = await fetch(`${API_BASE_URL}/pinned/${ticker}/investor_01`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -27,7 +27,7 @@ export const api = {
     },
 
     removePinned: async (ticker) => {
-        const response = await fetch(`${API_BASE_URL}/pinned/${ticker}`, {
+        const response = await fetch(`${API_BASE_URL}/pinned/${ticker}/investor_01`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
