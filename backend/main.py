@@ -177,7 +177,7 @@ def fetch_price_data(tickers):
 
     return results
 
-def summarize_news_with_bedrock(ticker, news_texts, news_urls=None):
+async def summarize_news_with_bedrock(ticker, news_texts, news_urls=None):
     """
     Summarizes news articles using AWS Bedrock Claude model.
     Returns a dict with summary, sentiment, sources, and disclaimer.
@@ -491,7 +491,7 @@ async def read_root():
     hist = ticker.history(period="5d")
     return {"message": hist.to_dict()}
 @app.get("/news/company/{ticker}", response_model=CompanyNewsResponse)
-def get_company_news(
+async def get_company_news(
     ticker: str,
     days: int = 7
 ):
@@ -791,7 +791,7 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
 
 @app.post("/summarize-news/{ticker}", response_model=dict)
 async def get_summarized_news(ticker: str, period: int = 7):
-    news = get_company_news(ticker, period)
+    news = await get_company_news(ticker, period)
     articles = news.get("articles", [])
     
     if not articles:
@@ -832,7 +832,7 @@ async def summarize_news(request: NewsSummaryRequest):
     try:
         # Since summarize_news_with_bedrock is a blocking I/O call (boto3),
         # we just call it normally here.
-        return summarize_news_with_bedrock(request.ticker, request.news, request.urls)
+        return await summarize_news_with_bedrock(request.ticker, request.news, request.urls)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summarization error: {str(e)}")
 
@@ -1077,7 +1077,7 @@ async def generate_pinned_stocks_overview(userId: str, days: int = 7):
         for ticker, name in rows:
             try:
                 # Get news for this ticker
-                news_response = get_company_news(ticker, days)
+                news_response = await get_company_news(ticker, days)
                 articles = news_response.get("articles", [])
 
                 if not articles:
@@ -1104,7 +1104,7 @@ async def generate_pinned_stocks_overview(userId: str, days: int = 7):
                         news_urls.append(getattr(article, "url", "") or "")
 
                 # Get summary for this individual stock
-                stock_summary = summarize_news_with_bedrock(ticker, news_texts, news_urls)
+                stock_summary = await summarize_news_with_bedrock(ticker, news_texts, news_urls)
 
                 individual_summaries.append({
                     "ticker": ticker,
@@ -1335,7 +1335,7 @@ async def summarize_market_news(days: int = 7):
             news_urls.append(getattr(article, "url", "") or "")
 
     # 3. Summarize using Bedrock
-    result = summarize_news_with_bedrock(
+    result = await summarize_news_with_bedrock(
         ticker="Overall Market",
         news_texts=news_texts,
         news_urls=news_urls
