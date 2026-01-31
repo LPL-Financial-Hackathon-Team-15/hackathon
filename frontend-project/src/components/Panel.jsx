@@ -1,8 +1,7 @@
-// components/DataPanel.jsx
-import { useState } from 'react'
+// components/Panel.jsx
 import LoadingSpinner from './LoadingSpinner'
 
-export default function Panel({ title, isExpanded, isCollapsed, onExpand, onCollapse, isLoading, children}) {
+export default function Panel({ title, isExpanded, isCollapsed, onExpand, onCollapse, isLoading, children }) {
     const handleClick = () => {
         if (isExpanded) {
             onCollapse()
@@ -13,12 +12,12 @@ export default function Panel({ title, isExpanded, isCollapsed, onExpand, onColl
 
     return (
         <div
-            className={`bg-white border border-gray-200 transition-all duration-300 rounded-2xl  ${
+            className={`bg-white border border-gray-200 transition-all duration-300 rounded-2xl flex flex-col overflow-hidden ${
                 isExpanded ? 'flex-[2]' : isCollapsed ? 'flex-none' : 'flex-1'
             }`}
         >
             {/* Header with expand/collapse button */}
-            <div className={`flex items-center justify-between p-4 ${!isCollapsed && 'border-b border-gray-200'}`}>
+            <div className="flex items-center justify-between p-4 flex-shrink-0 border-b border-gray-200">
                 <h2 className="text-xl font-bold text-[#07407b]">{title}</h2>
                 <button
                     onClick={handleClick}
@@ -26,12 +25,10 @@ export default function Panel({ title, isExpanded, isCollapsed, onExpand, onColl
                     title={isExpanded ? 'Collapse' : 'Expand'}
                 >
                     {isExpanded ? (
-                        // Collapse icon
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                     ) : (
-                        // Expand icon
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                         </svg>
@@ -40,21 +37,15 @@ export default function Panel({ title, isExpanded, isCollapsed, onExpand, onColl
             </div>
 
             {/* Content area - hidden when collapsed */}
-            {!isCollapsed && (
-                <div className="p-4 overflow-y-auto custom-scrollbar" style={{ height: 'calc(100% - 60px)' }}>
-                    {isLoading ? (
-                        <LoadingSpinner />
-                    ) : (
-                        <div className="p-4 overflow-y-auto custom-scrollbar" style={{ height: 'calc(100% - 60px)' }}>
-                            {isLoading ? (
-                                <LoadingSpinner />
-                            ) : (
-                                <div>
-                                    {children} {}
-                                </div>
-                            )}
-                        </div>
-                    )}
+            {!isCollapsed && !isLoading && (
+                <div className="flex-1 overflow-y-scroll custom-scrollbar p-4">
+                    {children}
+                </div>
+            )}
+
+            {!isCollapsed && isLoading && (
+                <div className="flex-1 flex items-center justify-center p-4">
+                    <LoadingSpinner />
                 </div>
             )}
         </div>
