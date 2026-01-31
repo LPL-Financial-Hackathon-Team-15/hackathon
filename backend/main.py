@@ -93,6 +93,10 @@ class NewsSummaryResponse(BaseModel):
     sentiment: str
     disclaimer: str
 
+class SummarizeRequest(BaseModel):
+    ticker: str
+    period: int = 7
+
 # --- Helper Functions ---
 def fetch_price_data(tickers):
     """
@@ -101,6 +105,9 @@ def fetch_price_data(tickers):
     """
     if not tickers:
         return {}
+
+    if isinstance(tickers, str):
+        tickers = [tickers]
 
     try:
         # Download data for all tickers at once
@@ -564,7 +571,9 @@ def get_explore_stocks(limit: int = 100, offset: int = 0):
 
 
 @app.post("/summarize-news", response_model=dict)
-async def get_summarized_news(ticker: str, period: int = 7):
+async def get_summarized_news(request: SummarizeRequest):
+    ticker = request.ticker
+    period = request.period
     news = get_company_news(ticker, period)
     articles = news.get("articles", [])
     
