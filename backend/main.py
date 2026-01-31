@@ -5,13 +5,9 @@ import yfinance as yf
 import sqlite3
 from pydantic import BaseModel
 import random
-import pandas as pd
 from typing import List
 from services.finnhub_service import fetch_company_news, fetch_market_news
 import os
-import get_1000
-from get_1000 import get_tickers_from_wikipedia
-# Add these imports at the top
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
 import threading
